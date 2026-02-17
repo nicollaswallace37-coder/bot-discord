@@ -1,6 +1,6 @@
+
 require('dotenv').config();
-const { Client, GatewayIntentBits, SlashCommandBuilder, Routes } = require('discord.js');
-const { REST } = require('@discordjs/rest');
+const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } = require('discord.js');
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds],
@@ -27,7 +27,7 @@ const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
   }
 })();
 
-client.once('clientReady', () => {
+client.once('ready', () => {
   console.log('Bot online!');
 });
 
@@ -39,3 +39,4 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
+client.login(process.env.TOKEN);
