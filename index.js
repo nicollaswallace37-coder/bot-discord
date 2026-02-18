@@ -1,142 +1,76 @@
-process.on("unhandledRejection", console.error);
-process.on("uncaughtException", console.error);
-
 const {
   Client,
   GatewayIntentBits,
+  SlashCommandBuilder,
   REST,
   Routes,
-  SlashCommandBuilder,
-  EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  StringSelectMenuBuilder
-} = require("discord.js");
+  EmbedBuilder
+} = require('discord.js');
 
-const express = require("express");
-const app = express();
-const PORT = process.env.PORT || 10000;
-
-app.get("/", (req, res) => {
-  res.status(200).send("OK");
-});
-
-app.listen(PORT, () => {
-  console.log("Servidor web rodando");
-});
+require('dotenv').config();
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
 
-// ===== REGISTRO DE COMANDOS =====
 const commands = [
   new SlashCommandBuilder()
-    .setName("criar_fila")
-    .setDescription("Criar painel de fila"),
-
-  new SlashCommandBuilder()
-    .setName("teste")
-    .setDescription("Comando de teste")
+    .setName('criar-fila')
+    .setDescription('Cria o painel de fila')
 ].map(command => command.toJSON());
 
-client.once("ready", async () => {
-  console.log("Bot online como " + client.user.tag);
+client.once('ready', async () => {
+  console.log(✅ Logado como ${client.user.tag});
 
-  const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
-  const GUILD_ID = "1473169041890742347";
+  const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
   try {
     await rest.put(
-      Routes.applicationGuildCommands(client.user.id, GUILD_ID),
-      { body: commands }
+      Routes.applicationCommands(client.user.id),
+      { body: commands },
     );
 
-    console.log("Comandos registrados no servidor!");
+    console.log('✅ Comando /criar-fila registrado!');
   } catch (error) {
     console.error(error);
   }
 });
 
-// ===== INTERAÇÕES =====
-client.on("interactionCreate", async (interaction) => {
-
-  // COMANDO
+client.on('interactionCreate', async interaction => {
   if (interaction.isChatInputCommand()) {
 
-    if (interaction.commandName === "teste") {
-      await interaction.reply("Está funcionando 🚀");
-    }
-
-    if (interaction.commandName === "criar_fila") {
+    if (interaction.commandName === 'criar-fila') {
 
       const embed = new EmbedBuilder()
-        .setTitle("📚 Criar Filas")
-        .setDescription("Selecione uma opção para configurar")
-        .addFields(
-          { name: "🎮 Jogo", value: "Free Fire", inline: true },
-          { name: "📱 Tipo", value: "Mobile", inline: true },
-          { name: "🎯 Modo", value: "1x1", inline: true },
-          { name: "💰 Preço", value: "R$ 2,50", inline: true }
-        )
-        .setColor("Blue");
+        .setTitle('📋 Sistema de Fila')
+        .setDescription('Clique no botão abaixo para entrar na fila.')
+        .setColor(0x00AEFF);
 
-      const menu = new StringSelectMenuBuilder()
-        .setCustomId("menu_config")
-        .setPlaceholder("Selecionar opção")
-        .addOptions([
-          { label: "Jogo", value: "jogo" },
-          { label: "Tipo", value: "tipo" },
-          { label: "Modo", value: "modo" },
-          { label: "Preço", value: "preco" }
-        ]);
+      const button = new ButtonBuilder()
+        .setCustomId('entrar_fila')
+        .setLabel('Entrar na Fila')
+        .setStyle(ButtonStyle.Primary);
 
-      const buttons = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("iniciar")
-          .setLabel("Iniciar Filas")
-          .setStyle(ButtonStyle.Success),
-
-        new ButtonBuilder()
-          .setCustomId("cancelar")
-          .setLabel("Cancelar")
-          .setStyle(ButtonStyle.Danger)
-      );
+      const row = new ActionRowBuilder().addComponents(button);
 
       await interaction.reply({
         embeds: [embed],
-        components: [
-          new ActionRowBuilder().addComponents(menu),
-          buttons
-        ]
+        components: [row]
       });
     }
   }
 
-  // BOTÕES
   if (interaction.isButton()) {
-
-    if (interaction.customId === "iniciar") {
+    if (interaction.customId === 'entrar_fila') {
       await interaction.reply({
-        content: "✅ Fila iniciada com sucesso!",
+        content: '✅ Você entrou na fila!',
         ephemeral: true
       });
     }
-
-    if (interaction.customId === "cancelar") {
-      await interaction.message.delete();
-    }
   }
-
-  // MENU
-  if (interaction.isStringSelectMenu()) {
-    await interaction.reply({
-      content: Você selecionou: ${interaction.values[0]},
-      ephemeral: true
-    });
-  }
-
 });
 
 client.login(process.env.TOKEN);
