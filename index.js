@@ -40,15 +40,17 @@ client.once("ready", async () => {
 
   const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
+  const GUILD_ID = "1473169041890742347";
+
   try {
-    console.log("Registrando comandos...");
+    console.log("Registrando comandos no servidor...");
 
     await rest.put(
-      Routes.applicationCommands(client.user.id),
+      Routes.applicationGuildCommands(client.user.id, GUILD_ID),
       { body: commands }
     );
 
-    console.log("Comandos registrados com sucesso!");
+    console.log("Comandos registrados no servidor!");
   } catch (error) {
     console.error(error);
   }
