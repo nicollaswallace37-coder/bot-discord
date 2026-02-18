@@ -4,11 +4,9 @@ process.on("uncaughtException", console.error);
 const {
   Client,
   GatewayIntentBits,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  StringSelectMenuBuilder,
-  EmbedBuilder
+  REST,
+  Routes,
+  SlashCommandBuilder
 } = require("discord.js");
 
 const express = require("express");
@@ -27,85 +25,47 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
 
-client.once("ready", () => {
+const commands = [
+  new SlashCommandBuilder()
+    .setName("fila")
+    .setDescription("Criar painel de fila"),
+
+  new SlashCommandBuilder()
+    .setName("teste")
+    .setDescription("Comando de teste")
+].map(command => command.toJSON());
+
+client.once("ready", async () => {
   console.log("Bot online como " + client.user.tag);
-  client.user.setActivity("Sistema de Filas 🔥");
+
+  const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
+
+  try {
+    console.log("Registrando comandos...");
+
+    await rest.put(
+      Routes.applicationCommands(client.user.id),
+      { body: commands }
+    );
+
+    console.log("Comandos registrados com sucesso!");
+  } catch (error) {
+    console.error(error);
+  }
 });
 
 client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isChatInputCommand()) return;
 
-  // ===== COMANDO /fila =====
-  if (interaction.isChatInputCommand()) {
-    if (interaction.commandName === "fila") {
+  await interaction.deferReply();
 
-      const embed = new EmbedBuilder()
-        .setTitle("📚 Criar Filas")
-        .setDescription("Selecione uma opção para configurar")
-        .addFields(
-          { name: "🎮 Jogo", value: "Free Fire", inline: true },
-          { name: "📱 Tipo", value: "Mobile", inline: true },
-          { name: "🎯 Modo", value: "1x1", inline: true },
-          { name: "💰 Preço", value: "R$ 2,50", inline: true }
-        )
-        .setColor("Blue");
-
-      const menu = new StringSelectMenuBuilder()
-        .setCustomId("menu_config")
-        .setPlaceholder("Selecionar opção")
-        .addOptions([
-          { label: "Jogo", value: "jogo" },
-          { label: "Tipo", value: "tipo" },
-          { label: "Modo", value: "modo" },
-          { label: "Preço", value: "preco" }
-        ]);
-
-      const buttons = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("iniciar")
-          .setLabel("Iniciar Filas")
-          .setStyle(ButtonStyle.Success),
-
-        new ButtonBuilder()
-          .setCustomId("cancelar")
-          .setLabel("Cancelar")
-          .setStyle(ButtonStyle.Danger)
-      );
-
-      await interaction.reply({
-        embeds: [embed],
-        components: [
-          new ActionRowBuilder().addComponents(menu),
-          buttons
-        ]
-      });
-    }
+  if (interaction.commandName === "teste") {
+    await interaction.editReply("Está funcionando 🚀");
   }
 
-  // ===== BOTÕES =====
-  if (interaction.isButton()) {
-
-    if (interaction.customId === "iniciar") {
-      await interaction.reply({
-        content: "✅ Fila iniciada com sucesso!",
-        ephemeral: true
-      });
-    }
-
-    if (interaction.customId === "cancelar") {
-      await interaction.message.delete();
-    }
+  if (interaction.commandName === "fila") {
+    await interaction.editReply("Sistema de fila funcionando ✅");
   }
-
-  // ===== MENU =====
-  if (interaction.isStringSelectMenu()) {
-
-    await interaction.reply({
-      content: Você selecionou: ${interaction.values[0]},
-      ephemeral: true
-    });
-
-  }
-
 });
 
 client.login(process.env.TOKEN);
