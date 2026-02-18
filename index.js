@@ -1,17 +1,17 @@
-// ===== PROTEÇÃO CONTRA ERROS =====
-process.on("unhandledRejection", (reason, promise) => {
-  console.log("Erro não tratado:", reason);
-});
+process.on("unhandledRejection", console.error);
+process.on("uncaughtException", console.error);
 
-process.on("uncaughtException", (error) => {
-  console.log("Erro inesperado:", error);
-});
+const {
+  Client,
+  GatewayIntentBits,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  StringSelectMenuBuilder,
+  EmbedBuilder
+} = require("discord.js");
 
-// ===== IMPORTAÇÕES =====
-const { Client, GatewayIntentBits } = require("discord.js");
 const express = require("express");
-
-// ===== SERVIDOR WEB (ANTI-SLEEP RENDER) =====
 const app = express();
 const PORT = process.env.PORT || 10000;
 
@@ -20,38 +20,92 @@ app.get("/", (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log("Servidor web rodando na porta " + PORT);
+  console.log("Servidor web rodando");
 });
 
-// ===== BOT DISCORD =====
 const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
 
 client.once("ready", () => {
   console.log("Bot online como " + client.user.tag);
-  client.user.setActivity("Estou online 24h 😎");
+  client.user.setActivity("Sistema de Filas 🔥");
 });
 
-// ===== COMANDOS SLASH =====
 client.on("interactionCreate", async (interaction) => {
-  if (!interaction.isChatInputCommand()) return;
 
-  try {
-    await interaction.deferReply(); // evita erro de "não respondeu"
-
-    if (interaction.commandName === "teste") {
-      await interaction.editReply("Está funcionando perfeitamente 🚀");
-    }
-
+  // ===== COMANDO /fila =====
+  if (interaction.isChatInputCommand()) {
     if (interaction.commandName === "fila") {
-      await interaction.editReply("Sistema de fila funcionando ✅");
+
+      const embed = new EmbedBuilder()
+        .setTitle("📚 Criar Filas")
+        .setDescription("Selecione uma opção para configurar")
+        .addFields(
+          { name: "🎮 Jogo", value: "Free Fire", inline: true },
+          { name: "📱 Tipo", value: "Mobile", inline: true },
+          { name: "🎯 Modo", value: "1x1", inline: true },
+          { name: "💰 Preço", value: "R$ 2,50", inline: true }
+        )
+        .setColor("Blue");
+
+      const menu = new StringSelectMenuBuilder()
+        .setCustomId("menu_config")
+        .setPlaceholder("Selecionar opção")
+        .addOptions([
+          { label: "Jogo", value: "jogo" },
+          { label: "Tipo", value: "tipo" },
+          { label: "Modo", value: "modo" },
+          { label: "Preço", value: "preco" }
+        ]);
+
+      const buttons = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("iniciar")
+          .setLabel("Iniciar Filas")
+          .setStyle(ButtonStyle.Success),
+
+        new ButtonBuilder()
+          .setCustomId("cancelar")
+          .setLabel("Cancelar")
+          .setStyle(ButtonStyle.Danger)
+      );
+
+      await interaction.reply({
+        embeds: [embed],
+        components: [
+          new ActionRowBuilder().addComponents(menu),
+          buttons
+        ]
+      });
+    }
+  }
+
+  // ===== BOTÕES =====
+  if (interaction.isButton()) {
+
+    if (interaction.customId === "iniciar") {
+      await interaction.reply({
+        content: "✅ Fila iniciada com sucesso!",
+        ephemeral: true
+      });
     }
 
-  } catch (error) {
-    console.log("Erro no comando:", error);
+    if (interaction.customId === "cancelar") {
+      await interaction.message.delete();
+    }
   }
+
+  // ===== MENU =====
+  if (interaction.isStringSelectMenu()) {
+
+    await interaction.reply({
+      content: Você selecionou: ${interaction.values[0]},
+      ephemeral: true
+    });
+
+  }
+
 });
 
-// ===== LOGIN =====
 client.login(process.env.TOKEN);
