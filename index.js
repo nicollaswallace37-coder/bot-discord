@@ -2,20 +2,21 @@ const { Client, GatewayIntentBits } = require("discord.js");
 const express = require("express");
 
 const app = express();
+const PORT = process.env.PORT;
+
 const client = new Client({
   intents: [GatewayIntentBits.Guilds],
 });
 
-// 🔹 Servidor para o Render não derrubar
 app.get("/", (req, res) => {
   res.send("Bot está online!");
 });
 
-app.listen(process.env.PORT || 3000, () => {
-  console.log("Servidor web iniciado");
+// ⚠️ IMPORTANTE: usar exatamente process.env.PORT
+app.listen(PORT, () => {
+  console.log("Servidor rodando na porta " + PORT);
 });
 
-// 🔹 Bot Discord
 client.once("ready", () => {
   console.log("Bot online com sucesso!");
 });
