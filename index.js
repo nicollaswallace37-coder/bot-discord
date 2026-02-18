@@ -1,9 +1,19 @@
-
 require('dotenv').config();
 const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } = require('discord.js');
+const express = require("express");
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds],
+});
+
+const app = express();
+
+app.get("/", (req, res) => {
+  res.send("Bot online!");
+});
+
+app.listen(3000, () => {
+  console.log("Servidor web ativo");
 });
 
 const commands = [
@@ -39,13 +49,4 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
-client.login(process.env.TOKEN);const express = require("express");
-const app = express();
-
-app.get("/", (req, res) => {
-  res.send("Bot online!");
-});
-
-app.listen(3000, () => {
-  console.log("Servidor web ativo");
-});
+client.login(process.env.TOKEN);
