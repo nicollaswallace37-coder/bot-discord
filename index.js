@@ -2,14 +2,14 @@ const { Client, GatewayIntentBits } = require("discord.js");
 const express = require("express");
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 
 app.get("/", (req, res) => {
-  res.send("Bot está online!");
+  res.status(200).send("Bot está online!");
 });
 
 app.listen(PORT, () => {
-  console.log("Servidor web rodando");
+  console.log("Servidor web rodando na porta " + PORT);
 });
 
 const client = new Client({
@@ -17,7 +17,7 @@ const client = new Client({
 });
 
 client.once("ready", () => {
-  console.log("Bot online");
+  console.log("Bot online como " + client.user.tag);
 });
 
 client.on("interactionCreate", async (interaction) => {
