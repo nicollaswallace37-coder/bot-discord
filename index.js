@@ -11,7 +11,7 @@ process.on("uncaughtException", (error) => {
 const { Client, GatewayIntentBits } = require("discord.js");
 const express = require("express");
 
-// ===== SERVIDOR WEB (ANTI SLEEP) =====
+// ===== SERVIDOR WEB (ANTI-SLEEP RENDER) =====
 const app = express();
 const PORT = process.env.PORT || 10000;
 
@@ -30,19 +30,18 @@ const client = new Client({
 
 client.once("ready", () => {
   console.log("Bot online como " + client.user.tag);
-
-  // Status do bot
   client.user.setActivity("Estou online 24h 😎");
 });
 
-// Slash command
+// ===== SLASH COMMAND =====
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
   if (interaction.commandName === "teste") {
-    await interaction.reply("Está funcionando perfeitamente 🚀");
+    await interaction.deferReply(); // evita erro de não respondeu
+    await interaction.editReply("Está funcionando perfeitamente 🚀");
   }
 });
 
-// Login
+// ===== LOGIN =====
 client.login(process.env.TOKEN);
