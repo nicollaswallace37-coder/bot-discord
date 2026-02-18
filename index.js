@@ -1,6 +1,6 @@
-const { 
-  Client, 
-  GatewayIntentBits, 
+const {
+  Client,
+  GatewayIntentBits,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
@@ -13,7 +13,7 @@ const {
 
 const express = require("express");
 const app = express();
-const PORT = process.env.PORT;
+const PORT = process.env.PORT || 3000;
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds],
@@ -26,6 +26,7 @@ app.get("/", (req, res) => {
 app.listen(PORT, () => {
   console.log("Servidor rodando na porta " + PORT);
 });
+
 client.once("ready", async () => {
   console.log("Bot online!");
 
@@ -44,6 +45,7 @@ client.once("ready", async () => {
 
   console.log("Comando registrado!");
 });
+
 client.on(Events.InteractionCreate, async interaction => {
 
   if (interaction.isChatInputCommand()) {
@@ -61,7 +63,7 @@ client.on(Events.InteractionCreate, async interaction => {
         )
         .setColor("Blue");
 
-      const row1 = new ActionRowBuilder().addComponents(
+      const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId("iniciar")
           .setLabel("Iniciar Filas")
@@ -75,7 +77,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
       await interaction.reply({
         embeds: [embed],
-        components: [row1]
+        components: [row]
       });
     }
   }
@@ -90,4 +92,13 @@ client.on(Events.InteractionCreate, async interaction => {
       });
     }
 
-    if (interaction.customId
+    if (interaction.customId === "iniciar") {
+      await interaction.reply({
+        content: "✅ Filas iniciadas com sucesso!",
+        ephemeral: true
+      });
+    }
+  }
+});
+
+client.login(process.env.TOKEN);
