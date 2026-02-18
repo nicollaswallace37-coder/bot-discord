@@ -18,12 +18,6 @@ client.on('interactionCreate', async interaction => {
     }
   } catch (error) {
     console.error(error);
-
-    if (interaction.replied || interaction.deferred) {
-      await interaction.followUp('❌ Deu erro ao executar o comando.');
-    } else {
-      await interaction.reply('❌ Deu erro ao executar o comando.');
-    }
   }
 });
 
