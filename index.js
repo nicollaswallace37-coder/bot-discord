@@ -39,4 +39,13 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
-client.login(process.env.TOKEN);
+client.login(process.env.TOKEN);const express = require("express");
+const app = express();
+
+app.get("/", (req, res) => {
+  res.send("Bot online!");
+});
+
+app.listen(3000, () => {
+  console.log("Servidor web ativo");
+});
