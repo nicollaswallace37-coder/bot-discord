@@ -48,7 +48,7 @@ const rest = new REST({ version: "10" }).setToken(TOKEN);
 
 // ===== Quando o bot ligar =====
 client.once(Events.ClientReady, (c) => {
-  console.log(Bot ligado como ${c.user.tag});
+  console.log(`Bot ligado como ${c.user.tag`});
 });
 
 // ===== Interações =====
