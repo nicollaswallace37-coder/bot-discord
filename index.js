@@ -33,13 +33,23 @@ client.once("ready", () => {
   client.user.setActivity("Estou online 24h 😎");
 });
 
-// ===== SLASH COMMAND =====
+// ===== COMANDOS SLASH =====
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
-  if (interaction.commandName === "teste") {
-    await interaction.deferReply(); // evita erro de não respondeu
-    await interaction.editReply("Está funcionando perfeitamente 🚀");
+  try {
+    await interaction.deferReply(); // evita erro de "não respondeu"
+
+    if (interaction.commandName === "teste") {
+      await interaction.editReply("Está funcionando perfeitamente 🚀");
+    }
+
+    if (interaction.commandName === "fila") {
+      await interaction.editReply("Sistema de fila funcionando ✅");
+    }
+
+  } catch (error) {
+    console.log("Erro no comando:", error);
   }
 });
 
