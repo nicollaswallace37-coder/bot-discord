@@ -23,31 +23,29 @@ const commands = [
 ].map(command => command.toJSON());
 
 client.once('ready', async () => {
-  console.log(`✅ Logado como ${client.user.tag});
+  console.log(✅ Logado como ${client.user.tag});
 
   const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
   try {
+    await rest.put(
+      Routes.applicationGuildCommands(
+        client.user.id,
+        '1473169041890742347'
+      ),
+      { body: commands }
+    );
 
-  await rest.put(
-    Routes.applicationGuildCommands(
-      client.user.id,
-      '1473169041890742347'
-    ),
-    { body: commands },
-  );
-
-  console.log('✅ Comando /criar-fila registrado!');
-
-} catch (error) {
-  console.error(error);
-}
-
+    console.log('✅ Comando /criar-fila registrado!');
+  } catch (error) {
+    console.error(error);
+  }
 });
 
 client.on('interactionCreate', async interaction => {
 
   if (interaction.isChatInputCommand()) {
+
     if (interaction.commandName === 'criar-fila') {
 
       const embed = new EmbedBuilder()
@@ -70,14 +68,16 @@ client.on('interactionCreate', async interaction => {
   }
 
   if (interaction.isButton()) {
+
     if (interaction.customId === 'entrar_fila') {
+
       await interaction.reply({
         content: '✅ Você entrou na fila!',
         ephemeral: true
       });
+
     }
   }
-
 });
 
 client.login(process.env.TOKEN);
