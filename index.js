@@ -13,20 +13,21 @@ const {
 
 require("dotenv").config();
 
+const TOKEN = process.env.TOKEN;
+const CLIENT_ID = process.env.CLIENT_ID;
+const GUILD_ID = process.env.GUILD_ID;
+
 const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
 
-const TOKEN = process.env.TOKEN;
-const CLIENT_ID = process.env.CLIENT_ID; // ID do bot
-const GUILD_ID = process.env.GUILD_ID;   // ID do servidor
-
-// ===== REGISTRAR COMANDO =====
+// ===== Registrar Slash Command =====
 const commands = [
   new SlashCommandBuilder()
     .setName("criarfila")
     .setDescription("Cria o painel de fila")
-].map(command => command.toJSON());
+    .toJSON()
+];
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
@@ -45,13 +46,13 @@ const rest = new REST({ version: "10" }).setToken(TOKEN);
   }
 })();
 
-// ===== BOT ONLINE =====
-client.once(Events.ClientReady, () => {
-  console.log(Bot ligado como ${client.user.tag});
+// ===== Quando o bot ligar =====
+client.once(Events.ClientReady, (c) => {
+  console.log(Bot ligado como ${c.user.tag});
 });
 
-// ===== INTERAÇÃO =====
-client.on(Events.InteractionCreate, async interaction => {
+// ===== Interações =====
+client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
   if (interaction.commandName === "criarfila") {
