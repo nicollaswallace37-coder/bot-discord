@@ -1,107 +1,108 @@
-const {
-  Client,
-  GatewayIntentBits,
-  Events,
-  EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  REST,
-  Routes,
-  SlashCommandBuilder
-} = require("discord.js");
-
-require("dotenv").config();
+const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, Collection } = require('discord.js');
 
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
-const GUILD_ID = process.env.GUILD_ID;
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds]
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent
+  ]
 });
 
-let fila = [];
+client.commands = new Collection();
 
-// ===== Registrar comando =====
-const commands = [
-  new SlashCommandBuilder()
-    .setName("criarfila")
-    .setDescription("Cria o painel da fila")
-    .toJSON()
-];
+// ===== COMANDO /fila =====
+const filaCommand = new SlashCommandBuilder()
+  .setName('fila')
+  .setDescription('Gerencia a fila')
+  .addSubcommand(sub =>
+    sub
+      .setName('criar')
+      .setDescription('Cria uma nova fila')
+  )
+  .addSubcommand(sub =>
+    sub
+      .setName('entrar')
+      .setDescription('Entrar na fila')
+  )
+  .addSubcommand(sub =>
+    sub
+      .setName('sair')
+      .setDescription('Sair da fila')
+  );
 
-const rest = new REST({ version: "10" }).setToken(TOKEN);
+client.commands.set(filaCommand.name, filaCommand);
 
-(async () => {
+const filas = {};
+
+// ===== REGISTRAR COMANDO =====
+client.once('ready', async () => {
+  const rest = new REST({ version: '10' }).setToken(TOKEN);
+
   try {
+    console.log('Registrando comando...');
+
     await rest.put(
-      Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
-      { body: commands }
+      Routes.applicationCommands(CLIENT_ID),
+      { body: [filaCommand.toJSON()] }
     );
-    console.log("Comando registrado com sucesso!");
+
+    console.log('Comando registrado com sucesso!');
+    console.log(`Bot ligado como ${client.user.tag}`);
   } catch (error) {
     console.error(error);
   }
-})();
-
-// ===== Quando o bot ligar =====
-client.once("ready", () => {
-  console.log(Bot ligado como ${client.user.tag});
 });
 
-// ===== Interações =====
-client.on(Events.InteractionCreate, async (interaction) => {
+// ===== INTERAÇÃO =====
+client.on('interactionCreate', async interaction => {
+  if (!interaction.isChatInputCommand()) return;
 
-  // Slash command
-  if (interaction.isChatInputCommand()) {
-    if (interaction.commandName === "criarfila") {
+  if (interaction.commandName === 'fila') {
 
-      fila = [];
+    const sub = interaction.options.getSubcommand();
 
-      const embed = new EmbedBuilder()
-        .setTitle("📋 Sistema de Fila")
-        .setDescription("Ninguém na fila ainda.")
-        .setColor(0x2b2d31);
-
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("entrar_fila")
-          .setLabel("Entrar na Fila")
-          .setStyle(ButtonStyle.Success)
-      );
-
-      await interaction.reply({
-        embeds: [embed],
-        components: [row]
-      });
-    }
-  }
-
-  // Botão
-  if (interaction.isButton()) {
-
-    if (interaction.customId === "entrar_fila") {
-
-      if (!fila.includes(interaction.user.id)) {
-        fila.push(interaction.user.id);
+    if (sub === 'criar') {
+      if (filas[interaction.guildId]) {
+        return interaction.reply({ content: 'Já existe uma fila criada!', ephemeral: true });
       }
 
-      const lista = fila.length > 0
-        ? fila.map((id, index) => ${index + 1}. <@${id}>).join("\n")
-        : "Ninguém na fila ainda.";
+      filas[interaction.guildId] = [];
+      return interaction.reply('Fila criada com sucesso!');
+    }
 
-      const embedAtualizado = new EmbedBuilder()
-        .setTitle("📋 Sistema de Fila")
-        .setDescription(lista)
-        .setColor(0x2b2d31);
+    if (sub === 'entrar') {
+      if (!filas[interaction.guildId]) {
+        return interaction.reply({ content: 'Nenhuma fila foi criada ainda!', ephemeral: true });
+      }
 
-      await interaction.update({
-        embeds: [embedAtualizado]
-      });
+      if (filas[interaction.guildId].includes(interaction.user.id)) {
+        return interaction.reply({ content: 'Você já está na fila!', ephemeral: true });
+      }
+
+      filas[interaction.guildId].push(interaction.user.id);
+
+      return interaction.reply(`Você entrou na fila! Posição: ${filas[interaction.guildId].length}`);
+    }
+
+    if (sub === 'sair') {
+      if (!filas[interaction.guildId]) {
+        return interaction.reply({ content: 'Nenhuma fila foi criada ainda!', ephemeral: true });
+      }
+
+      const index = filas[interaction.guildId].indexOf(interaction.user.id);
+
+      if (index === -1) {
+        return interaction.reply({ content: 'Você não está na fila!', ephemeral: true });
+      }
+
+      filas[interaction.guildId].splice(index, 1);
+
+      return interaction.reply('Você saiu da fila!');
     }
   }
-
 });
 
 client.login(TOKEN);
