@@ -1,14 +1,14 @@
 const { Client, GatewayIntentBits } = require("discord.js");
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds],
+  intents: [GatewayIntentBits.Guilds]
 });
 
-client.once("ready", () => {
-  console.log("Bot online como " + client.user.tag);
+client.once("ready", function () {
+  console.log("Bot online");
 });
 
-client.on("interactionCreate", async (interaction) => {
+client.on("interactionCreate", async function (interaction) {
   if (!interaction.isChatInputCommand()) return;
 
   if (interaction.commandName === "teste") {
