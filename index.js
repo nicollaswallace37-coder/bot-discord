@@ -28,13 +28,13 @@ client.once('ready', async () => {
   const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
   try {
-   await rest.put(
-  Routes.applicationGuildCommands(
-    client.user.id,
-    '1473169041890742347'
-  ),
-  { body: commands },
-);
+    await rest.put(
+      Routes.applicationGuildCommands(
+        client.user.id,
+        '1473169041890742347'
+      ),
+      { body: commands },
+    );
 
     console.log('✅ Comando /criar-fila registrado!');
   } catch (error) {
@@ -43,8 +43,8 @@ client.once('ready', async () => {
 });
 
 client.on('interactionCreate', async interaction => {
-  if (interaction.isChatInputCommand()) {
 
+  if (interaction.isChatInputCommand()) {
     if (interaction.commandName === 'criar-fila') {
 
       const embed = new EmbedBuilder()
@@ -74,6 +74,7 @@ client.on('interactionCreate', async interaction => {
       });
     }
   }
+
 });
 
 client.login(process.env.TOKEN);
