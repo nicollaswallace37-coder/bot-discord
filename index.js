@@ -28,10 +28,13 @@ client.once('ready', async () => {
   const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
   try {
-    await rest.put(
-      Routes.applicationCommands(client.user.id),
-      { body: commands },
-    );
+   await rest.put(
+  Routes.applicationGuildCommands(
+    client.user.id,
+    '1473169041890742347'
+  ),
+  { body: commands },
+);
 
     console.log('✅ Comando /criar-fila registrado!');
   } catch (error) {
