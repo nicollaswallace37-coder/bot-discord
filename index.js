@@ -1,6 +1,6 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } = require('discord.js');
-const express = require("express");
+const express = require('express');
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds],
@@ -12,7 +12,9 @@ app.get("/", (req, res) => {
   res.send("Bot online!");
 });
 
-app.listen(3000, () => {
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
   console.log("Servidor web ativo");
 });
 
