@@ -1,53 +1,29 @@
-require('dotenv').config();
-const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } = require('discord.js');
-const express = require('express');
+const { Client, GatewayIntentBits } = require('discord.js');
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds],
 });
 
-const app = express();
-
-app.get("/", (req, res) => {
-  res.send("Bot online!");
-});
-
-const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, () => {
-  console.log("Servidor web ativo");
-});
-
-const commands = [
-  new SlashCommandBuilder()
-    .setName('teste')
-    .setDescription('Comando de teste')
-].map(command => command.toJSON());
-
-const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
-
-(async () => {
-  try {
-    console.log('Registrando comando...');
-    await rest.put(
-      Routes.applicationCommands(process.env.CLIENT_ID),
-      { body: commands },
-    );
-    console.log('Comando registrado!');
-  } catch (error) {
-    console.error(error);
-  }
-})();
-
 client.once('ready', () => {
-  console.log('Bot online!');
+  console.log(✅ Bot online como ${client.user.tag});
 });
 
 client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
-  if (interaction.commandName === 'teste') {
-    await interaction.reply('Está funcionando!');
+  try {
+    if (interaction.commandName === 'teste') {
+      await interaction.deferReply();
+      await interaction.editReply('✅ Está funcionando!');
+    }
+  } catch (error) {
+    console.error(error);
+
+    if (interaction.replied || interaction.deferred) {
+      await interaction.followUp('❌ Deu erro ao executar o comando.');
+    } else {
+      await interaction.reply('❌ Deu erro ao executar o comando.');
+    }
   }
 });
 
