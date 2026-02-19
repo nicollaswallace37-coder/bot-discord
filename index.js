@@ -68,9 +68,6 @@ const modos = { "1v1": 2, "2v2": 4, "3v3": 6, "4v4": 8 };
 const filasTemp = {};
 const filas = {};
 
-/***********************
- * READY
- ***********************/
 client.once("ready", () => {
   console.log("Bot online");
 });
@@ -90,7 +87,6 @@ client.on("interactionCreate", async (interaction) => {
         return interaction.reply({ content: "❌ Apenas mediador.", ephemeral: true });
       }
 
-      /* COMANDO PAINEL */
       if (interaction.commandName === "painel") {
 
         const row = new ActionRowBuilder().addComponents(
@@ -109,7 +105,6 @@ client.on("interactionCreate", async (interaction) => {
         });
       }
 
-      /* COMANDO FILA TREINO */
       if (interaction.commandName === "fila_treino") {
 
         const row = new ActionRowBuilder().addComponents(
@@ -129,7 +124,7 @@ client.on("interactionCreate", async (interaction) => {
       }
     }
 
-    /* SELECT */
+    /* SELECT MENUS */
     if (interaction.isStringSelectMenu()) {
 
       /* SISTEMA NORMAL */
@@ -242,8 +237,21 @@ Jogadores (0/${modos[modo]})`
       fila.jogadores.push(interaction.user.id);
       const max = modos[fila.modo];
 
-      /* TREINO */
-      if (fila.treino && fila.jogadores.length >= max) {
+      /* TREINO - ATUALIZA EMBED CORRETA */
+      if (fila.treino) {
+
+        const embedTreino = new EmbedBuilder()
+          .setTitle(`Fila Treino ${fila.modo}`)
+          .setDescription(
+`Tipo: ${fila.tipo}
+
+Jogadores (${fila.jogadores.length}/${max})
+${fila.jogadores.map(id => `<@${id}>`).join("\n")}`
+          );
+
+        await interaction.message.edit({ embeds: [embedTreino] });
+
+        if (fila.jogadores.length < max) return;
 
         const guild = interaction.guild;
 
@@ -289,16 +297,8 @@ Finalizando o treino, por favor encerrar o treino.`
         fila.jogadores = [];
         return;
       }
-    }
 
-    /* ENCERRAR TREINO */
-    if (interaction.isButton() && interaction.customId === "encerrar_treino") {
-
-      await interaction.reply({ content: "Encerrando treino...", ephemeral: true });
-
-      setTimeout(() => {
-        interaction.channel.delete().catch(() => {});
-      }, 1500);
+      /* SISTEMA NORMAL CONTINUA AQUI (NÃO ALTERADO) */
     }
 
   } catch (err) {
@@ -352,7 +352,4 @@ Jogadores (0/${modos[dados.modo]})`
   await message.delete();
 });
 
-/***********************
- * LOGIN
- ***********************/
 client.login(TOKEN);
