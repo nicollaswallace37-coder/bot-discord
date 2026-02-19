@@ -45,6 +45,8 @@ client.on("interactionCreate", async (interaction) => {
   if (interaction.isChatInputCommand()) {
     if (interaction.commandName === "criarfila") {
 
+      await interaction.deferReply(); // 🔥 evita erro dos 3 segundos
+
       const nomeFila = interaction.options.getString("nome");
       const maxJogadores = interaction.options.getInteger("max");
 
@@ -70,7 +72,10 @@ client.on("interactionCreate", async (interaction) => {
           .setStyle(ButtonStyle.Danger)
       );
 
-      await interaction.reply({ embeds: [embed], components: [row] });
+      await interaction.editReply({
+        embeds: [embed],
+        components: [row]
+      });
     }
   }
 
@@ -80,7 +85,8 @@ client.on("interactionCreate", async (interaction) => {
     const [acao, nomeFila] = interaction.customId.split("_");
     const fila = filas.get(nomeFila);
 
-    if (!fila) return interaction.reply({ content: "Fila não encontrada.", ephemeral: true });
+    if (!fila)
+      return interaction.reply({ content: "Fila não encontrada.", ephemeral: true });
 
     // ===== ENTRAR =====
     if (acao === "entrar") {
