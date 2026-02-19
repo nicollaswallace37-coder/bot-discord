@@ -4,17 +4,26 @@ const {
   Client,
   GatewayIntentBits,
   Partials,
+  EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  StringSelectMenuBuilder,
   ChannelType,
-  PermissionsBitField,
-  EmbedBuilder
+  PermissionsBitField
 } = require("discord.js");
 
 const express = require("express");
 const app = express();
+
+const PORT = process.env.PORT || 10000;
+
+app.get("/", (req, res) => {
+  res.send("Bot online 🚀");
+});
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🌍 Servidor rodando na porta ${PORT}`);
+});
 
 const client = new Client({
   intents: [
@@ -24,223 +33,129 @@ const client = new Client({
   partials: [Partials.Channel]
 });
 
-const token = process.env.TOKEN;
-if (!token) {
-  console.error("TOKEN não encontrada.");
-  process.exit(1);
-}
-
-// ===== CONFIG =====
-const MEDIADOR_ROLE_NAME = "Mediador";
-
-const tipos = ["Mobile", "Emu", "Misto", "Tático", "Full soco"];
-const modos = ["1x1", "2x2", "3x3", "4x4"];
-const precos = [
-  "0,20","0,50","1","2","3","4","5","6","7","8","9","10","12","15","20"
-];
-
-// Armazena filas
 const filas = new Map();
 
-// ================== READY ==================
 client.once("ready", () => {
   console.log(`✅ Bot online como ${client.user.tag}`);
 });
 
-// ================== COMANDO /fila ==================
 client.on("interactionCreate", async (interaction) => {
 
-  // ===== COMANDO =====
+  // ================= CRIAR FILA =================
   if (interaction.isChatInputCommand()) {
+    if (interaction.commandName === "criarfila") {
 
-    if (interaction.commandName === "fila") {
+      const nomeFila = interaction.options.getString("nome");
+      const maxJogadores = interaction.options.getInteger("max");
 
-      const tipoMenu = new StringSelectMenuBuilder()
-        .setCustomId("select_tipo")
-        .setPlaceholder("Selecione o tipo")
-        .addOptions(tipos.map(t => ({ label: t, value: t })));
-
-      const modoMenu = new StringSelectMenuBuilder()
-        .setCustomId("select_modo")
-        .setPlaceholder("Selecione o modo")
-        .addOptions(modos.map(m => ({ label: m, value: m })));
-
-      const precoMenu = new StringSelectMenuBuilder()
-        .setCustomId("select_preco")
-        .setPlaceholder("Selecione o preço")
-        .addOptions(precos.map(p => ({ label: `R$ ${p}`, value: p })));
-
-      const criarBtn = new ButtonBuilder()
-        .setCustomId("criar_fila")
-        .setLabel("Criar Fila")
-        .setStyle(ButtonStyle.Success);
-
-      await interaction.reply({
-        content: "⚙️ Configure sua fila:",
-        components: [
-          new ActionRowBuilder().addComponents(tipoMenu),
-          new ActionRowBuilder().addComponents(modoMenu),
-          new ActionRowBuilder().addComponents(precoMenu),
-          new ActionRowBuilder().addComponents(criarBtn)
-        ]
+      filas.set(nomeFila, {
+        jogadores: [],
+        max: maxJogadores
       });
-    }
-  }
-
-  // ===== SELECT =====
-  if (interaction.isStringSelectMenu()) {
-
-    const userId = interaction.user.id;
-
-    if (!filas.has(userId)) filas.set(userId, {});
-
-    const dados = filas.get(userId);
-
-    if (interaction.customId === "select_tipo") {
-      dados.tipo = interaction.values[0];
-    }
-
-    if (interaction.customId === "select_modo") {
-      dados.modo = interaction.values[0];
-    }
-
-    if (interaction.customId === "select_preco") {
-      dados.preco = interaction.values[0];
-    }
-
-    filas.set(userId, dados);
-
-    await interaction.reply({ content: "✅ Selecionado!", ephemeral: true });
-  }
-
-  // ===== BOTÕES =====
-  if (interaction.isButton()) {
-
-    // CRIAR FILA
-    if (interaction.customId === "criar_fila") {
-
-      const dados = filas.get(interaction.user.id);
-      if (!dados?.tipo || !dados?.modo || !dados?.preco) {
-        return interaction.reply({
-          content: "❌ Configure tipo, modo e preço primeiro.",
-          ephemeral: true
-        });
-      }
-
-      const idFila = `${dados.tipo}-${dados.modo}-${dados.preco}`;
-
-      if (!filas.has(idFila)) {
-        filas.set(idFila, {
-          jogadores: [],
-          config: dados
-        });
-      }
-
-      const fila = filas.get(idFila);
-
-      const entrarBtn = new ButtonBuilder()
-        .setCustomId(`entrar_${idFila}`)
-        .setLabel("Entrar")
-        .setStyle(ButtonStyle.Primary);
-
-      const sairBtn = new ButtonBuilder()
-        .setCustomId(`sair_${idFila}`)
-        .setLabel("Sair")
-        .setStyle(ButtonStyle.Danger);
 
       const embed = new EmbedBuilder()
-        .setTitle(`Fila ${dados.modo} - ${dados.tipo}`)
-        .setDescription(`💰 R$ ${dados.preco}\n\n👥 Jogadores:\nNinguém ainda`)
+        .setTitle(`🎮 Fila: ${nomeFila}`)
+        .setDescription(`👥 Jogadores:\nNenhum ainda`)
         .setColor("Green");
 
-      await interaction.channel.send({
-        embeds: [embed],
-        components: [new ActionRowBuilder().addComponents(entrarBtn, sairBtn)]
-      });
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`entrar_${nomeFila}`)
+          .setLabel("Entrar")
+          .setStyle(ButtonStyle.Success),
 
-      await interaction.reply({ content: "✅ Fila criada!", ephemeral: true });
+        new ButtonBuilder()
+          .setCustomId(`sair_${nomeFila}`)
+          .setLabel("Sair")
+          .setStyle(ButtonStyle.Danger)
+      );
+
+      await interaction.reply({ embeds: [embed], components: [row] });
     }
+  }
 
-    // ENTRAR
-    if (interaction.customId.startsWith("entrar_")) {
+  // ================= BOTÕES =================
+  if (interaction.isButton()) {
 
-      const idFila = interaction.customId.replace("entrar_", "");
-      const fila = filas.get(idFila);
+    const [acao, nomeFila] = interaction.customId.split("_");
+    const fila = filas.get(nomeFila);
 
-      if (!fila) return;
+    if (!fila) return interaction.reply({ content: "Fila não encontrada.", ephemeral: true });
 
-      if (!fila.jogadores.includes(interaction.user.id)) {
-        fila.jogadores.push(interaction.user.id);
-      }
+    // ===== ENTRAR =====
+    if (acao === "entrar") {
 
-      await atualizarMensagem(interaction, fila);
+      if (fila.jogadores.includes(interaction.user.id))
+        return interaction.reply({ content: "Você já está na fila.", ephemeral: true });
 
-      // Se completar
-      const quantidade = parseInt(fila.config.modo.split("x")[0]) * 2;
+      if (fila.jogadores.length >= fila.max)
+        return interaction.reply({ content: "Fila já está cheia.", ephemeral: true });
 
-      if (fila.jogadores.length >= quantidade) {
-        await criarSalaPrivada(interaction.guild, fila);
+      fila.jogadores.push(interaction.user.id);
+
+      await atualizarMensagem(interaction, nomeFila);
+
+      await interaction.reply({ content: "Você entrou na fila!", ephemeral: true });
+
+      if (fila.jogadores.length === fila.max) {
+        await criarSalaPrivada(interaction.guild, nomeFila, fila.jogadores);
         fila.jogadores = [];
       }
-
-      await interaction.deferUpdate();
     }
 
-    // SAIR
-    if (interaction.customId.startsWith("sair_")) {
-
-      const idFila = interaction.customId.replace("sair_", "");
-      const fila = filas.get(idFila);
-
-      if (!fila) return;
+    // ===== SAIR =====
+    if (acao === "sair") {
 
       fila.jogadores = fila.jogadores.filter(id => id !== interaction.user.id);
 
-      await atualizarMensagem(interaction, fila);
-      await interaction.deferUpdate();
+      await atualizarMensagem(interaction, nomeFila);
+
+      await interaction.reply({ content: "Você saiu da fila.", ephemeral: true });
     }
 
-    // ENCERRAR SALA
-    if (interaction.customId.startsWith("encerrar_")) {
+    // ===== ENCERRAR SALA =====
+    if (acao === "encerrar") {
 
-      const role = interaction.member.roles.cache.find(r => r.name === MEDIADOR_ROLE_NAME);
-      if (!role) {
-        return interaction.reply({ content: "❌ Apenas mediador pode encerrar.", ephemeral: true });
-      }
+      if (!interaction.member.roles.cache.some(r => r.name === "Mediador"))
+        return interaction.reply({ content: "Você não é mediador.", ephemeral: true });
 
       await interaction.channel.delete();
     }
   }
-
 });
 
-// ===== ATUALIZAR EMBED =====
-async function atualizarMensagem(interaction, fila) {
+// ================= ATUALIZAR EMBED =================
+async function atualizarMensagem(interaction, nomeFila) {
 
-  const nomes = fila.jogadores.map(id => `<@${id}>`).join("\n") || "Ninguém ainda";
+  const fila = filas.get(nomeFila);
+
+  const lista =
+    fila.jogadores.length > 0
+      ? fila.jogadores.map(id => `<@${id}>`).join("\n")
+      : "Nenhum ainda";
 
   const embed = new EmbedBuilder()
-    .setTitle(`Fila ${fila.config.modo} - ${fila.config.tipo}`)
-    .setDescription(`💰 R$ ${fila.config.preco}\n\n👥 Jogadores:\n${nomes}`)
+    .setTitle(`🎮 Fila: ${nomeFila}`)
+    .setDescription(`👥 Jogadores:\n${lista}`)
     .setColor("Green");
 
   await interaction.message.edit({ embeds: [embed] });
 }
 
-// ===== CRIAR SALA PRIVADA =====
-async function criarSalaPrivada(guild, fila) {
+// ================= CRIAR SALA PRIVADA =================
+async function criarSalaPrivada(guild, nomeFila, jogadores) {
 
-  const mediadorRole = guild.roles.cache.find(r => r.name === MEDIADOR_ROLE_NAME);
+  const mediadorRole = guild.roles.cache.find(r => r.name === "Mediador");
 
-  const canal = await guild.channels.create({
-    name: `sala-${fila.config.modo}`,
+  const channel = await guild.channels.create({
+    name: `sala-${nomeFila}`,
     type: ChannelType.GuildText,
     permissionOverwrites: [
       {
-        id: guild.roles.everyone.id,
+        id: guild.roles.everyone,
         deny: [PermissionsBitField.Flags.ViewChannel]
       },
-      ...fila.jogadores.map(id => ({
+      ...jogadores.map(id => ({
         id: id,
         allow: [PermissionsBitField.Flags.ViewChannel]
       })),
@@ -251,26 +166,17 @@ async function criarSalaPrivada(guild, fila) {
     ].filter(Boolean)
   });
 
-  const encerrarBtn = new ButtonBuilder()
-    .setCustomId(`encerrar_${canal.id}`)
-    .setLabel("Encerrar Sala")
-    .setStyle(ButtonStyle.Danger);
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("encerrar_sala")
+      .setLabel("Encerrar Sala")
+      .setStyle(ButtonStyle.Danger)
+  );
 
-  await canal.send({
-    content: "Sala criada! 🔥",
-    components: [new ActionRowBuilder().addComponents(encerrarBtn)]
+  await channel.send({
+    content: `Sala criada para: ${jogadores.map(id => `<@${id}>`).join(", ")}`,
+    components: [row]
   });
 }
 
-// ===== LOGIN =====
-client.login(token);
-
-// ===== SERVIDOR RENDER =====
-app.get("/", (req, res) => {
-  res.send("Bot online 🚀");
-});
-
-const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => {
-  console.log(`🌍 Porta ${PORT}`);
-});
+client.login(process.env.TOKEN);
