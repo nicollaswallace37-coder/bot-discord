@@ -87,6 +87,7 @@ client.once("ready", () => {
 client.on("interactionCreate", async (interaction) => {
   try {
 
+    /* SLASH */
     if (interaction.isChatInputCommand()) {
       if (interaction.commandName === "painel") {
 
@@ -109,6 +110,44 @@ client.on("interactionCreate", async (interaction) => {
 
         return interaction.reply({ embeds: [embed], components: [row] });
       }
+    }
+
+    /* SELECT MODO */
+    if (interaction.isStringSelectMenu() && interaction.customId === "modo_select") {
+
+      await interaction.deferUpdate();
+
+      const modo = interaction.values[0];
+
+      const row = new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId(`tipo_${modo}`)
+          .setPlaceholder("Escolha o tipo")
+          .addOptions([
+            { label: "mobile", value: "mobile" },
+            { label: "emu", value: "emu" },
+            { label: "misto", value: "misto" },
+            { label: "tatico", value: "tatico" },
+            { label: "full soco", value: "full soco" }
+          ])
+      );
+
+      return interaction.message.edit({ components: [row] });
+    }
+
+    /* SELECT TIPO */
+    if (interaction.isStringSelectMenu() && interaction.customId.startsWith("tipo_")) {
+
+      await interaction.deferReply({ ephemeral: true });
+
+      const modo = interaction.customId.replace("tipo_", "");
+      const tipo = interaction.values[0];
+
+      filasTemp[interaction.user.id] = { modo, tipo };
+
+      return interaction.editReply({
+        content: "Digite os valores separados por vírgula\nEx: 10, 20"
+      });
     }
 
     if (!interaction.isButton()) return;
@@ -239,7 +278,7 @@ client.on("messageCreate", async (message) => {
 });
 
 /***********************
- * ATUALIZAR EMBED (CORRIGIDO)
+ * ATUALIZAR EMBED
  ***********************/
 async function atualizarMensagem(interaction, fila, key) {
 
