@@ -111,41 +111,9 @@ client.on("interactionCreate", async (interaction) => {
       }
     }
 
-    if (interaction.isStringSelectMenu() && interaction.customId === "modo_select") {
-      await interaction.deferUpdate();
-      const modo = interaction.values[0];
-
-      const row = new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder()
-          .setCustomId(`tipo_${modo}`)
-          .setPlaceholder("Escolha o tipo")
-          .addOptions([
-            { label: "mobile", value: "mobile" },
-            { label: "emu", value: "emu" },
-            { label: "misto", value: "misto" },
-            { label: "tatico", value: "tatico" },
-            { label: "full soco", value: "full soco" }
-          ])
-      );
-
-      return interaction.message.edit({ components: [row] });
-    }
-
-    if (interaction.isStringSelectMenu() && interaction.customId.startsWith("tipo_")) {
-      await interaction.deferReply({ ephemeral: true });
-
-      const modo = interaction.customId.replace("tipo_", "");
-      const tipo = interaction.values[0];
-
-      filasTemp[interaction.user.id] = { modo, tipo };
-
-      return interaction.editReply({
-        content: "Digite os valores separados por vírgula\nEx: 10, 20"
-      });
-    }
-
     if (!interaction.isButton()) return;
 
+    /* ENTRAR */
     if (interaction.customId.startsWith("entrar_")) {
 
       await interaction.deferUpdate();
@@ -154,20 +122,20 @@ client.on("interactionCreate", async (interaction) => {
       const fila = filas[key];
       if (!fila) return;
 
-      if (fila.jogadores.includes(interaction.user.id)) return;
+      if (!fila.jogadores.includes(interaction.user.id)) {
+        fila.jogadores.push(interaction.user.id);
+      }
 
-      fila.jogadores.push(interaction.user.id);
-      await atualizarMensagem(interaction, fila);
+      await atualizarMensagem(interaction, fila, key);
 
       if (fila.jogadores.length === modos[fila.modo]) {
-
         await criarPartida(interaction.guild, fila);
-
         fila.jogadores = [];
-        await atualizarMensagem(interaction, fila);
+        await atualizarMensagem(interaction, fila, key);
       }
     }
 
+    /* SAIR */
     if (interaction.customId.startsWith("sair_")) {
 
       await interaction.deferUpdate();
@@ -177,9 +145,10 @@ client.on("interactionCreate", async (interaction) => {
       if (!fila) return;
 
       fila.jogadores = fila.jogadores.filter(id => id !== interaction.user.id);
-      await atualizarMensagem(interaction, fila);
+      await atualizarMensagem(interaction, fila, key);
     }
 
+    /* CONFIRMAR */
     if (interaction.customId.startsWith("confirmar_")) {
 
       if (!interaction.member.roles.cache.some(r =>
@@ -190,16 +159,17 @@ client.on("interactionCreate", async (interaction) => {
 
       const valor = interaction.customId.replace("confirmar_", "");
 
+      await interaction.reply({ content: "✅ Confirmado.", ephemeral: true });
+
       await interaction.channel.send(
 `💰 **Pagamento Confirmado**
 
 Pix: 450.553.628.98
 Valor: R$ ${valor}`
       );
-
-      await interaction.reply({ content: "✅ Confirmado.", ephemeral: true });
     }
 
+    /* ENCERRAR */
     if (interaction.customId === "encerrar_partida") {
 
       if (!interaction.member.roles.cache.some(r =>
@@ -269,9 +239,9 @@ client.on("messageCreate", async (message) => {
 });
 
 /***********************
- * ATUALIZAR EMBED
+ * ATUALIZAR EMBED (CORRIGIDO)
  ***********************/
-async function atualizarMensagem(interaction, fila) {
+async function atualizarMensagem(interaction, fila, key) {
 
   const max = modos[fila.modo];
 
@@ -286,11 +256,22 @@ async function atualizarMensagem(interaction, fila) {
     )
     .setColor("Blue");
 
-  await interaction.message.edit({ embeds: [embed] });
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`entrar_${key}`)
+      .setLabel("Entrar")
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId(`sair_${key}`)
+      .setLabel("Sair")
+      .setStyle(ButtonStyle.Danger)
+  );
+
+  await interaction.message.edit({ embeds: [embed], components: [row] });
 }
 
 /***********************
- * CRIAR PARTIDA (CORRIGIDO)
+ * CRIAR PARTIDA
  ***********************/
 async function criarPartida(guild, fila) {
 
@@ -305,10 +286,7 @@ async function criarPartida(guild, fila) {
     type: ChannelType.GuildText,
     parent: categoria.id,
     permissionOverwrites: [
-      {
-        id: guild.roles.everyone,
-        deny: [PermissionFlagsBits.ViewChannel]
-      }
+      { id: guild.roles.everyone, deny: [PermissionFlagsBits.ViewChannel] }
     ]
   });
 
@@ -330,7 +308,6 @@ async function criarPartida(guild, fila) {
     });
   }
 
-  // mensagem normal
   await canal.send(
 `🎮 **Partida criada!**
 ⚔ ${fila.modo}
@@ -341,9 +318,7 @@ async function criarPartida(guild, fila) {
 ${fila.jogadores.map(id => `<@${id}>`).join("\n")}`
   );
 
-  // painel só mediador
   if (mediador) {
-
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(`confirmar_${fila.preco}`)
