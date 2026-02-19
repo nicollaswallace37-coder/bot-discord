@@ -8,11 +8,16 @@ const {
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle
+  ButtonStyle,
+  ChannelType,
+  PermissionFlagsBits
 } = require("discord.js");
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds]
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers
+  ]
 });
 
 const TOKEN = process.env.TOKEN;
@@ -84,6 +89,7 @@ client.on("interactionCreate", async interaction => {
   /* ===== BOTÕES ===== */
   if (interaction.isButton()) {
 
+    /* ===== ENTRAR ===== */
     if (interaction.customId === "entrar") {
 
       if (fila.includes(interaction.user.id)) {
@@ -102,9 +108,10 @@ client.on("interactionCreate", async interaction => {
 
       fila.push(interaction.user.id);
 
-      atualizarPainel(interaction);
+      await atualizarPainel(interaction);
     }
 
+    /* ===== SAIR ===== */
     if (interaction.customId === "sair") {
 
       if (!fila.includes(interaction.user.id)) {
@@ -116,15 +123,34 @@ client.on("interactionCreate", async interaction => {
 
       fila = fila.filter(id => id !== interaction.user.id);
 
-      atualizarPainel(interaction);
+      await atualizarPainel(interaction);
+    }
+
+    /* ===== ENCERRAR ===== */
+    if (interaction.customId === "encerrar") {
+
+      const cargoMediador = interaction.guild.roles.cache.find(
+        r => r.name === "Mediador"
+      );
+
+      if (!cargoMediador || !interaction.member.roles.cache.has(cargoMediador.id)) {
+        return interaction.reply({
+          content: "Apenas Mediadores podem encerrar.",
+          ephemeral: true
+        });
+      }
+
+      await interaction.channel.delete();
     }
   }
 
 });
 
-/* ================= FUNÇÃO ATUALIZAR ================= */
+/* ================= ATUALIZAR PAINEL ================= */
 
 async function atualizarPainel(interaction) {
+
+  const guild = interaction.guild;
 
   const nomes = fila.length > 0
     ? fila.map(id => `<@${id}>`).join("\n")
@@ -134,6 +160,71 @@ async function atualizarPainel(interaction) {
     .setTitle(`🎮 Fila ${nomeFila}`)
     .setDescription(`👥 Jogadores (${fila.length}/${maxJogadores}):\n${nomes}`)
     .setColor("Blue");
+
+  /* ===== SE FECHAR A FILA ===== */
+  if (fila.length === maxJogadores) {
+
+    const categoria = guild.channels.cache.find(
+      c => c.type === ChannelType.GuildCategory && c.name === "rush"
+    );
+
+    if (!categoria) {
+      console.log("Categoria 'rush' não encontrada!");
+    } else {
+
+      const cargoMediador = guild.roles.cache.find(
+        r => r.name === "Mediador"
+      );
+
+      const permissionOverwrites = [
+        {
+          id: guild.roles.everyone.id,
+          deny: [PermissionFlagsBits.ViewChannel]
+        }
+      ];
+
+      if (cargoMediador) {
+        permissionOverwrites.push({
+          id: cargoMediador.id,
+          allow: [
+            PermissionFlagsBits.ViewChannel,
+            PermissionFlagsBits.SendMessages
+          ]
+        });
+      }
+
+      fila.forEach(id => {
+        permissionOverwrites.push({
+          id: id,
+          allow: [
+            PermissionFlagsBits.ViewChannel,
+            PermissionFlagsBits.SendMessages
+          ]
+        });
+      });
+
+      const canal = await guild.channels.create({
+        name: `sala-${Date.now()}`,
+        type: ChannelType.GuildText,
+        parent: categoria.id,
+        permissionOverwrites
+      });
+
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("encerrar")
+          .setLabel("Encerrar Chat")
+          .setStyle(ButtonStyle.Danger)
+      );
+
+      await canal.send({
+        content: "Partida iniciada!",
+        components: [row]
+      });
+
+      fila = [];
+    }
+  }
 
   await interaction.update({
     embeds: [embed]
