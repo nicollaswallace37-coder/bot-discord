@@ -38,13 +38,12 @@ const client = new Client({
 const filas = new Map();
 
 function limitePorModo(modo) {
-  const limites = {
+  return {
     "1x1": 2,
     "2x2": 4,
     "3x3": 6,
     "4x4": 8
-  };
-  return limites[modo];
+  }[modo];
 }
 
 const comando = new SlashCommandBuilder()
@@ -66,9 +65,8 @@ client.once('ready', async () => {
 
 client.on('interactionCreate', async interaction => {
 
-  // ================= SLASH =================
+  // SLASH
   if (interaction.isChatInputCommand()) {
-
     if (interaction.commandName === 'painel') {
 
       filas.set(interaction.channel.id, {
@@ -104,12 +102,12 @@ client.on('interactionCreate', async interaction => {
           { label: '4x4', value: '4x4' },
         ]);
 
-      const botaoPreco = new ButtonBuilder()
+      const precoBtn = new ButtonBuilder()
         .setCustomId('config_preco')
         .setLabel('Definir Preços')
         .setStyle(ButtonStyle.Secondary);
 
-      const botaoCriar = new ButtonBuilder()
+      const criarBtn = new ButtonBuilder()
         .setCustomId('criar_fila')
         .setLabel('Criar Fila')
         .setStyle(ButtonStyle.Success);
@@ -119,51 +117,46 @@ client.on('interactionCreate', async interaction => {
         components: [
           new ActionRowBuilder().addComponents(tipoMenu),
           new ActionRowBuilder().addComponents(modoMenu),
-          new ActionRowBuilder().addComponents(botaoPreco),
-          new ActionRowBuilder().addComponents(botaoCriar)
+          new ActionRowBuilder().addComponents(precoBtn),
+          new ActionRowBuilder().addComponents(criarBtn)
         ]
       });
     }
   }
 
-  // ================= SELECT =================
+  // SELECT
   if (interaction.isStringSelectMenu()) {
-
     const fila = filas.get(interaction.channel.id);
     if (!fila) return;
 
+    await interaction.deferReply({ ephemeral: true });
+
     if (interaction.customId === 'config_tipo') {
       fila.tipo = interaction.values[0];
-      return interaction.reply({ content: `Tipo definido: ${fila.tipo}`, ephemeral: true });
+      return interaction.editReply(`Tipo definido: ${fila.tipo}`);
     }
 
     if (interaction.customId === 'config_modo') {
       fila.modo = interaction.values[0];
-      return interaction.reply({ content: `Modo definido: ${fila.modo}`, ephemeral: true });
+      return interaction.editReply(`Modo definido: ${fila.modo}`);
     }
   }
 
-  // ================= BUTTONS =================
+  // BUTTON
   if (interaction.isButton()) {
 
-    // ENCERRAR PARTIDA
     if (interaction.customId === 'encerrar_partida') {
-
       if (!interaction.member.roles.cache.some(r => r.name === "mediador")) {
         return interaction.reply({ content: 'Apenas mediador pode encerrar.', ephemeral: true });
       }
-
       return interaction.channel.delete();
     }
 
     const fila = filas.get(interaction.channel.id);
-    if (!fila) {
-      return interaction.reply({ content: 'Use /painel primeiro.', ephemeral: true });
-    }
+    if (!fila) return;
 
     // DEFINIR PREÇO
     if (interaction.customId === 'config_preco') {
-
       const modal = new ModalBuilder()
         .setCustomId('modal_preco')
         .setTitle('Definir Preços');
@@ -171,19 +164,19 @@ client.on('interactionCreate', async interaction => {
       const input = new TextInputBuilder()
         .setCustomId('precos_input')
         .setLabel('Separe por ; Ex: 0,20;2,50;10')
-        .setStyle(TextInputStyle.Paragraph)
-        .setRequired(true);
+        .setStyle(TextInputStyle.Paragraph);
 
       modal.addComponents(new ActionRowBuilder().addComponents(input));
-
       return interaction.showModal(modal);
     }
+
+    await interaction.deferReply({ ephemeral: true });
 
     // CRIAR FILA
     if (interaction.customId === 'criar_fila') {
 
       if (!fila.tipo || !fila.modo || fila.precos.length === 0) {
-        return interaction.reply({ content: 'Configure tudo antes.', ephemeral: true });
+        return interaction.editReply('Configure tudo antes.');
       }
 
       const embed = new EmbedBuilder()
@@ -191,115 +184,42 @@ client.on('interactionCreate', async interaction => {
         .addFields(
           { name: 'Tipo', value: fila.tipo, inline: true },
           { name: 'Modo', value: fila.modo, inline: true },
-          { name: 'Preços', value: fila.precos.join('\n') },
-          { name: 'Jogadores', value: 'Nenhum ainda.' }
+          { name: 'Preços', value: fila.precos.join('\n') }
         )
         .setColor('Green');
 
       const entrar = new ButtonBuilder()
         .setCustomId('entrar_fila')
-        .setLabel('Entrar na Fila')
+        .setLabel('Entrar')
         .setStyle(ButtonStyle.Primary);
 
       const sair = new ButtonBuilder()
         .setCustomId('sair_fila')
-        .setLabel('Sair da Fila')
+        .setLabel('Sair')
         .setStyle(ButtonStyle.Danger);
 
-      return interaction.reply({
+      await interaction.channel.send({
         embeds: [embed],
         components: [new ActionRowBuilder().addComponents(entrar, sair)]
       });
-    }
 
-    // ENTRAR NA FILA
-    if (interaction.customId === 'entrar_fila') {
-
-      if (fila.jogadores.includes(interaction.user.id)) {
-        return interaction.reply({ content: 'Você já está na fila.', ephemeral: true });
-      }
-
-      fila.jogadores.push(interaction.user.id);
-      await interaction.reply({ content: 'Você entrou na fila!', ephemeral: true });
-
-      const limite = limitePorModo(fila.modo);
-
-      if (fila.jogadores.length >= limite) {
-
-        const participantes = fila.jogadores.splice(0, limite);
-        const mediadorRole = interaction.guild.roles.cache.find(r => r.name === "mediador");
-        if (!mediadorRole) return;
-
-        const canal = await interaction.guild.channels.create({
-          name: `partida-${Date.now()}`,
-          type: ChannelType.GuildText,
-          permissionOverwrites: [
-            {
-              id: interaction.guild.roles.everyone,
-              deny: [PermissionsBitField.Flags.ViewChannel]
-            },
-            ...participantes.map(id => ({
-              id,
-              allow: [PermissionsBitField.Flags.ViewChannel]
-            })),
-            {
-              id: mediadorRole.id,
-              allow: [PermissionsBitField.Flags.ViewChannel]
-            }
-          ]
-        });
-
-        const embedPartida = new EmbedBuilder()
-          .setTitle('🎮 Sala da Partida')
-          .setDescription('Aguardando mediador encerrar.')
-          .setColor('Red');
-
-        const encerrar = new ButtonBuilder()
-          .setCustomId('encerrar_partida')
-          .setLabel('Encerrar')
-          .setStyle(ButtonStyle.Danger);
-
-        await canal.send({
-          embeds: [embedPartida],
-          components: [new ActionRowBuilder().addComponents(encerrar)]
-        });
-      }
-    }
-
-    // SAIR DA FILA
-    if (interaction.customId === 'sair_fila') {
-
-      if (!fila.jogadores.includes(interaction.user.id)) {
-        return interaction.reply({ content: 'Você não está na fila.', ephemeral: true });
-      }
-
-      fila.jogadores = fila.jogadores.filter(id => id !== interaction.user.id);
-
-      return interaction.reply({ content: 'Você saiu da fila!', ephemeral: true });
+      return interaction.editReply('Fila criada com sucesso!');
     }
   }
 
-  // ================= MODAL =================
+  // MODAL
   if (interaction.isModalSubmit()) {
-
     if (interaction.customId === 'modal_preco') {
+
+      await interaction.deferReply({ ephemeral: true });
 
       const fila = filas.get(interaction.channel.id);
       if (!fila) return;
 
       const valores = interaction.fields.getTextInputValue('precos_input');
-      const lista = valores
-        .split(/[;]+/)
-        .map(v => v.trim())
-        .filter(v => v);
+      fila.precos = valores.split(/[;]+/).map(v => v.trim()).filter(v => v);
 
-      if (lista.length > 15) {
-        return interaction.reply({ content: 'Máximo 15 valores.', ephemeral: true });
-      }
-
-      fila.precos = lista;
-
-      return interaction.reply({ content: 'Preços definidos com sucesso!', ephemeral: true });
+      return interaction.editReply('Preços definidos!');
     }
   }
 
