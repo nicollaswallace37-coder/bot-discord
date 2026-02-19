@@ -1,5 +1,5 @@
 /***********************
- * SERVIDOR PARA RENDER
+ * SERVIDOR RENDER
  ***********************/
 const express = require("express");
 const app = express();
@@ -24,7 +24,10 @@ const {
   ButtonStyle,
   StringSelectMenuBuilder,
   ChannelType,
-  PermissionFlagsBits
+  PermissionFlagsBits,
+  REST,
+  Routes,
+  SlashCommandBuilder
 } = require("discord.js");
 
 const client = new Client({
@@ -36,6 +39,32 @@ const client = new Client({
 });
 
 const TOKEN = process.env.TOKEN;
+const CLIENT_ID = process.env.CLIENT_ID;
+const GUILD_ID = process.env.GUILD_ID;
+
+/***********************
+ * REGISTRAR SLASH
+ ***********************/
+const commands = [
+  new SlashCommandBuilder()
+    .setName("painel")
+    .setDescription("Abrir painel de criação de fila")
+    .toJSON()
+];
+
+const rest = new REST({ version: "10" }).setToken(TOKEN);
+
+(async () => {
+  try {
+    await rest.put(
+      Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+      { body: commands }
+    );
+    console.log("✅ Slash registrado");
+  } catch (err) {
+    console.log(err);
+  }
+})();
 
 /***********************
  * CONFIG
@@ -54,7 +83,7 @@ const filas = {};
  * BOT ONLINE
  ***********************/
 client.once("ready", () => {
-  console.log(`✅ Logado como ${client.user.tag}`);
+  console.log(`🤖 Logado como ${client.user.tag}`);
 });
 
 /***********************
@@ -63,11 +92,38 @@ client.once("ready", () => {
 client.on("interactionCreate", async (interaction) => {
   try {
 
+    /* ===== SLASH /painel ===== */
+    if (interaction.isChatInputCommand()) {
+      if (interaction.commandName === "painel") {
+
+        const embed = new EmbedBuilder()
+          .setTitle("Criar Fila")
+          .setDescription("Escolha o modo")
+          .setColor("Blue");
+
+        const row = new ActionRowBuilder().addComponents(
+          new StringSelectMenuBuilder()
+            .setCustomId("modo_select")
+            .setPlaceholder("Escolha o modo")
+            .addOptions([
+              { label: "1v1", value: "1v1" },
+              { label: "2v2", value: "2v2" },
+              { label: "3v3", value: "3v3" },
+              { label: "4v4", value: "4v4" }
+            ])
+        );
+
+        return interaction.reply({
+          embeds: [embed],
+          components: [row]
+        });
+      }
+    }
+
     /* ===== MENU MODO ===== */
     if (interaction.isStringSelectMenu() && interaction.customId === "modo_select") {
 
       await interaction.deferUpdate();
-
       const modo = interaction.values[0];
 
       const embed = new EmbedBuilder()
@@ -143,7 +199,7 @@ client.on("interactionCreate", async (interaction) => {
       await atualizarMensagem(interaction, fila, key);
     }
 
-    /* ===== ENCERRAR ===== */
+    /* ===== ENCERRAR PARTIDA ===== */
     if (interaction.customId === "encerrar_partida") {
 
       if (!interaction.member.roles.cache.some(r => r.name === "Mediador"))
@@ -153,7 +209,7 @@ client.on("interactionCreate", async (interaction) => {
     }
 
   } catch (err) {
-    console.log("Erro na interação:", err);
+    console.log("Erro:", err);
   }
 });
 
@@ -168,7 +224,6 @@ client.on("messageCreate", async (message) => {
   if (!dados) return;
 
   const valores = message.content.split(",").map(v => v.trim());
-
   delete filasTemp[message.author.id];
 
   for (const valor of valores) {
