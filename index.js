@@ -1,3 +1,17 @@
+const express = require("express");
+const app = express();
+
+/* ===== SERVIDOR PRA RENDER ===== */
+app.get("/", (req, res) => {
+  res.send("Bot online!");
+});
+
+app.listen(process.env.PORT || 3000, () => {
+  console.log("Servidor web iniciado.");
+});
+
+/* ===== DISCORD ===== */
+
 const {
   Client,
   GatewayIntentBits,
@@ -11,7 +25,7 @@ const {
 } = require("discord.js");
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds]
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
 });
 
 const TOKEN = process.env.TOKEN;
@@ -25,6 +39,7 @@ const modos = {
   "4v4": 8
 };
 
+const filasTemp = {};
 const filas = {};
 
 /* ================= BOT ONLINE ================= */
@@ -33,11 +48,9 @@ client.once("ready", () => {
   console.log(`✅ Logado como ${client.user.tag}`);
 });
 
-/* ================= CRIAR FILA ================= */
+/* ================= INTERAÇÕES ================= */
 
 client.on("interactionCreate", async interaction => {
-
-  /* ===== MENU MODO ===== */
 
   if (interaction.isStringSelectMenu() && interaction.customId === "modo_select") {
 
@@ -53,7 +66,7 @@ client.on("interactionCreate", async interaction => {
         .setPlaceholder("Escolha o tipo")
         .addOptions([
           { label: "mobile", value: "mobile" },
-          { label: "emu", value: "emu" }, // CORRIGIDO
+          { label: "emu", value: "emu" },
           { label: "misto", value: "misto" },
           { label: "tatico", value: "tatico" },
           { label: "full soco", value: "full soco" }
@@ -63,76 +76,18 @@ client.on("interactionCreate", async interaction => {
     return interaction.update({ embeds: [embed], components: [row] });
   }
 
-  /* ===== MENU TIPO ===== */
-
   if (interaction.isStringSelectMenu() && interaction.customId.startsWith("tipo_")) {
 
     const modo = interaction.customId.replace("tipo_", "");
     const tipo = interaction.values[0];
 
-    const embed = new EmbedBuilder()
-      .setTitle("Digite os valores separados por vírgula")
-      .setDescription("Exemplo: 0.20, 5.90, 10")
-      .setColor("Blue");
+    filasTemp[interaction.user.id] = { modo, tipo };
 
-    filas[interaction.user.id] = { modo, tipo };
-
-    return interaction.reply({ embeds: [embed], ephemeral: true });
+    return interaction.reply({
+      content: "Digite os valores separados por vírgula\nEx: 0.20, 5.90, 10",
+      ephemeral: true
+    });
   }
-
-});
-
-/* ================= RECEBER VALORES ================= */
-
-client.on("messageCreate", async message => {
-
-  if (message.author.bot) return;
-
-  const dados = filas[message.author.id];
-  if (!dados) return;
-
-  const valores = message.content.split(",").map(v => v.trim());
-
-  delete filas[message.author.id];
-
-  for (const valor of valores) {
-
-    const key = `${dados.modo}_${dados.tipo}_${valor}`;
-
-    filas[key] = {
-      modo: dados.modo,
-      tipo: dados.tipo,
-      preco: valor,
-      jogadores: []
-    };
-
-    const embed = new EmbedBuilder()
-      .setTitle(`Fila ${dados.modo}`)
-      .setDescription(
-        `⚔ Tipo: ${dados.tipo}\n💰 Valor: R$ ${valor}\n\n👥 Jogadores (0/${modos[dados.modo]}):\nNenhum`
-      )
-      .setColor("Green");
-
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`entrar_${key}`)
-        .setLabel("Entrar")
-        .setStyle(ButtonStyle.Success),
-      new ButtonBuilder()
-        .setCustomId(`sair_${key}`)
-        .setLabel("Sair")
-        .setStyle(ButtonStyle.Danger)
-    );
-
-    await message.channel.send({ embeds: [embed], components: [row] });
-  }
-
-  await message.delete();
-});
-
-/* ================= BOTÕES ================= */
-
-client.on("interactionCreate", async interaction => {
 
   if (!interaction.isButton()) return;
 
@@ -178,7 +133,54 @@ client.on("interactionCreate", async interaction => {
 
     await interaction.channel.delete();
   }
+});
 
+/* ================= RECEBER VALORES ================= */
+
+client.on("messageCreate", async message => {
+
+  if (message.author.bot) return;
+
+  const dados = filasTemp[message.author.id];
+  if (!dados) return;
+
+  const valores = message.content.split(",").map(v => v.trim());
+
+  delete filasTemp[message.author.id];
+
+  for (const valor of valores) {
+
+    const key = `${dados.modo}_${dados.tipo}_${valor}`;
+
+    filas[key] = {
+      modo: dados.modo,
+      tipo: dados.tipo,
+      preco: valor,
+      jogadores: []
+    };
+
+    const embed = new EmbedBuilder()
+      .setTitle(`Fila ${dados.modo}`)
+      .setDescription(
+        `⚔ Tipo: ${dados.tipo}\n💰 Valor: R$ ${valor}\n\n👥 Jogadores (0/${modos[dados.modo]}):\nNenhum`
+      )
+      .setColor("Green");
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`entrar_${key}`)
+        .setLabel("Entrar")
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId(`sair_${key}`)
+        .setLabel("Sair")
+        .setStyle(ButtonStyle.Danger)
+    );
+
+    await message.channel.send({ embeds: [embed], components: [row] });
+  }
+
+  await message.delete();
 });
 
 /* ================= ATUALIZAR EMBED ================= */
