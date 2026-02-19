@@ -38,12 +38,12 @@ const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
 /***********************
- * SLASH COMMAND
+ * SLASH
  ***********************/
 const commands = [
   new SlashCommandBuilder()
     .setName("painel")
-    .setDescription("Abrir painel de criação")
+    .setDescription("Abrir painel")
     .toJSON()
 ];
 
@@ -82,10 +82,7 @@ client.on("interactionCreate", async (interaction) => {
       if (!interaction.member.roles.cache.some(r =>
         r.name.toLowerCase() === "mediador"
       )) {
-        return interaction.reply({
-          content: "❌ Apenas mediador.",
-          ephemeral: true
-        });
+        return interaction.reply({ content: "❌ Apenas mediador.", ephemeral: true });
       }
 
       const row = new ActionRowBuilder().addComponents(
@@ -93,10 +90,7 @@ client.on("interactionCreate", async (interaction) => {
           .setCustomId("modo_select")
           .setPlaceholder("Escolha o modo")
           .addOptions(
-            Object.keys(modos).map(m => ({
-              label: m,
-              value: m
-            }))
+            Object.keys(modos).map(m => ({ label: m, value: m }))
           )
       );
 
@@ -141,7 +135,7 @@ client.on("interactionCreate", async (interaction) => {
         filasTemp[interaction.user.id] = { modo, tipo };
 
         return interaction.update({
-          content: "Digite os valores separados por vírgula (ex: 10, 20)",
+          content: "Digite os valores separados por vírgula (ex: 10,20)",
           components: []
         });
       }
@@ -165,7 +159,7 @@ client.on("interactionCreate", async (interaction) => {
       const embed = new EmbedBuilder()
         .setTitle(`Fila ${fila.modo}`)
         .setDescription(
-          `Tipo: ${fila.tipo}
+`Tipo: ${fila.tipo}
 Valor: R$ ${fila.preco}
 
 Jogadores (${fila.jogadores.length}/${max})
@@ -174,10 +168,15 @@ ${fila.jogadores.map(id => `<@${id}>`).join("\n")}`
 
       await interaction.message.edit({ embeds: [embed] });
 
-      /* Se lotar cria canal */
+      /* SE LOTAR */
       if (fila.jogadores.length >= max) {
 
         const guild = interaction.guild;
+
+        const categoria = guild.channels.cache.find(c =>
+          c.name === "rush" && c.type === ChannelType.GuildCategory
+        );
+
         const mediador = guild.roles.cache.find(r =>
           r.name.toLowerCase() === "mediador"
         );
@@ -185,6 +184,7 @@ ${fila.jogadores.map(id => `<@${id}>`).join("\n")}`
         const canal = await guild.channels.create({
           name: `partida-${fila.modo}-${fila.preco}`,
           type: ChannelType.GuildText,
+          parent: categoria ? categoria.id : null,
           permissionOverwrites: [
             {
               id: guild.roles.everyone.id,
@@ -217,6 +217,7 @@ ${fila.jogadores.map(id => `<@${id}>`).join("\n")}`
 ${fila.jogadores.map(id => `<@${id}>`).join("\n")}`
         );
 
+        /* PAINEL APENAS MEDIADOR */
         const row = new ActionRowBuilder().addComponents(
           new ButtonBuilder()
             .setCustomId(`confirmar_${fila.preco}`)
@@ -229,11 +230,24 @@ ${fila.jogadores.map(id => `<@${id}>`).join("\n")}`
         );
 
         await canal.send({
-          content: `🔐 Painel do Mediador`,
-          components: [row]
+          content: `<@&${mediador.id}> Painel do Mediador`,
+          components: [row],
+          allowedMentions: { roles: [mediador.id] }
         });
 
-        delete filas[key];
+        /* CRIA NOVA FILA AUTOMÁTICA */
+        fila.jogadores = [];
+
+        const novoEmbed = new EmbedBuilder()
+          .setTitle(`Fila ${fila.modo}`)
+          .setDescription(
+`Tipo: ${fila.tipo}
+Valor: R$ ${fila.preco}
+
+Jogadores (0/${max})`
+          );
+
+        await interaction.message.edit({ embeds: [novoEmbed] });
       }
     }
 
@@ -251,7 +265,7 @@ ${fila.jogadores.map(id => `<@${id}>`).join("\n")}`
       await interaction.reply({ content: "Pagamento confirmado.", ephemeral: true });
 
       await interaction.channel.send(
-        `💰 Pix: 450.553.628.98
+`💰 Pix: 450.553.628.98
 Valor: R$ ${valor}`
       );
     }
@@ -304,7 +318,7 @@ client.on("messageCreate", async (message) => {
     const embed = new EmbedBuilder()
       .setTitle(`Fila ${dados.modo}`)
       .setDescription(
-        `Tipo: ${dados.tipo}
+`Tipo: ${dados.tipo}
 Valor: R$ ${valor}
 
 Jogadores (0/${modos[dados.modo]})`
