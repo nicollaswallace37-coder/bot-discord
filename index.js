@@ -38,6 +38,8 @@ const client = new Client({
 
 const filas = new Map();
 
+// ================= REGISTRAR COMANDO =================
+
 const commands = [
   new SlashCommandBuilder()
     .setName("criarfila")
@@ -68,8 +70,11 @@ client.once("ready", async () => {
   }
 });
 
+// ================= INTERAÇÕES =================
+
 client.on("interactionCreate", async (interaction) => {
 
+  // ===== COMANDO =====
   if (interaction.isChatInputCommand()) {
 
     if (interaction.commandName === "criarfila") {
@@ -108,27 +113,44 @@ client.on("interactionCreate", async (interaction) => {
     }
   }
 
+  // ===== BOTÕES =====
   if (interaction.isButton()) {
 
     const [acao, nomeFila] = interaction.customId.split("_");
     const fila = filas.get(nomeFila);
 
-    if (!fila)
-      return interaction.reply({ content: "Fila não encontrada.", ephemeral: true });
+    if (!fila) {
+      return interaction.reply({
+        content: "Fila não encontrada.",
+        ephemeral: true
+      });
+    }
 
+    // ENTRAR
     if (acao === "entrar") {
 
-      if (fila.jogadores.includes(interaction.user.id))
-        return interaction.reply({ content: "Você já está na fila.", ephemeral: true });
+      if (fila.jogadores.includes(interaction.user.id)) {
+        return interaction.reply({
+          content: "Você já está na fila.",
+          ephemeral: true
+        });
+      }
 
-      if (fila.jogadores.length >= fila.max)
-        return interaction.reply({ content: "Fila cheia.", ephemeral: true });
+      if (fila.jogadores.length >= fila.max) {
+        return interaction.reply({
+          content: "Fila já está cheia.",
+          ephemeral: true
+        });
+      }
 
       fila.jogadores.push(interaction.user.id);
 
       await atualizarMensagem(interaction, nomeFila);
 
-      await interaction.reply({ content: "Você entrou na fila!", ephemeral: true });
+      await interaction.reply({
+        content: "Você entrou na fila!",
+        ephemeral: true
+      });
 
       if (fila.jogadores.length === fila.max) {
         await criarSalaPrivada(interaction.guild, nomeFila, fila.jogadores);
@@ -136,24 +158,37 @@ client.on("interactionCreate", async (interaction) => {
       }
     }
 
+    // SAIR
     if (acao === "sair") {
 
-      fila.jogadores = fila.jogadores.filter(id => id !== interaction.user.id);
+      fila.jogadores = fila.jogadores.filter(
+        id => id !== interaction.user.id
+      );
 
       await atualizarMensagem(interaction, nomeFila);
 
-      await interaction.reply({ content: "Você saiu da fila.", ephemeral: true });
+      await interaction.reply({
+        content: "Você saiu da fila.",
+        ephemeral: true
+      });
     }
 
+    // ENCERRAR SALA
     if (acao === "encerrar") {
 
-      if (!interaction.member.roles.cache.some(r => r.name === "Mediador"))
-        return interaction.reply({ content: "Você não é mediador.", ephemeral: true });
+      if (!interaction.member.roles.cache.some(r => r.name === "Mediador")) {
+        return interaction.reply({
+          content: "Você não é mediador.",
+          ephemeral: true
+        });
+      }
 
       await interaction.channel.delete();
     }
   }
 });
+
+// ================= ATUALIZAR EMBED =================
 
 async function atualizarMensagem(interaction, nomeFila) {
 
@@ -171,6 +206,8 @@ async function atualizarMensagem(interaction, nomeFila) {
 
   await interaction.message.edit({ embeds: [embed] });
 }
+
+// ================= CRIAR SALA =================
 
 async function criarSalaPrivada(guild, nomeFila, jogadores) {
 
@@ -190,4 +227,24 @@ async function criarSalaPrivada(guild, nomeFila, jogadores) {
       })),
       mediadorRole && {
         id: mediadorRole.id,
-        allow: [PermissionsBitField.Flags.View
+        allow: [PermissionsBitField.Flags.ViewChannel]
+      }
+    ].filter(Boolean)
+  });
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("encerrar_sala")
+      .setLabel("Encerrar Sala")
+      .setStyle(ButtonStyle.Danger)
+  );
+
+  await channel.send({
+    content: `Sala criada para: ${jogadores
+      .map(id => `<@${id}>`)
+      .join(", ")}`,
+    components: [row]
+  });
+}
+
+client.login(process.env.TOKEN);
