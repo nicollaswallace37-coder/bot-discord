@@ -1,4 +1,6 @@
 require("dotenv").config();
+const http = require("http");
+
 const {
   Client,
   GatewayIntentBits,
@@ -8,17 +10,28 @@ const {
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle,
-  ChannelType,
-  PermissionFlagsBits
+  ButtonStyle
 } = require("discord.js");
 
-/* ================= CONFIG ================= */
+/* ================== CONFIG ================== */
 
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = "1473102205115564112";
 const GUILD_ID = "1473169041890742347";
 const OWNER_ID = "1467036179386990593";
+
+/* ================== SERVIDOR WEB (RENDER FIX) ================== */
+
+const PORT = process.env.PORT || 3000;
+
+http.createServer((req, res) => {
+  res.writeHead(200);
+  res.end("Bot online.");
+}).listen(PORT, "0.0.0.0", () => {
+  console.log(`Servidor web rodando na porta ${PORT}`);
+});
+
+/* ================== CLIENT ================== */
 
 const client = new Client({
   intents: [
@@ -27,7 +40,7 @@ const client = new Client({
   ]
 });
 
-/* ================= COMANDO ================= */
+/* ================== COMANDO ================== */
 
 const commands = [
   new SlashCommandBuilder()
@@ -43,19 +56,18 @@ client.once("ready", async () => {
       Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
       { body: commands }
     );
-    console.log("Comando registrado!");
+    console.log("Comando /painel registrado com sucesso!");
   } catch (err) {
-    console.error(err);
+    console.error("Erro ao registrar comando:", err);
   }
 
   console.log(`Bot online como ${client.user.tag}`);
 });
 
-/* ================= INTERAÇÕES ================= */
+/* ================== INTERAÇÕES ================== */
 
 client.on("interactionCreate", async interaction => {
 
-  /* ===== BLOQUEIO APENAS DONO ===== */
   if (interaction.isChatInputCommand()) {
 
     if (interaction.user.id !== OWNER_ID) {
@@ -69,24 +81,14 @@ client.on("interactionCreate", async interaction => {
 
       const embed = new EmbedBuilder()
         .setTitle("🎮 Painel de Configuração")
-        .setDescription("Selecione as opções da fila usando os botões abaixo.")
+        .setDescription("Sistema de filas iniciado com sucesso.")
         .setColor("Blue");
 
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-          .setCustomId("modo")
-          .setLabel("Selecionar Modo")
-          .setStyle(ButtonStyle.Primary),
-
-        new ButtonBuilder()
-          .setCustomId("tipo")
-          .setLabel("Selecionar Tipo")
-          .setStyle(ButtonStyle.Primary),
-
-        new ButtonBuilder()
-          .setCustomId("preco")
-          .setLabel("Selecionar Preço")
-          .setStyle(ButtonStyle.Success)
+          .setCustomId("info")
+          .setLabel("Configurar Fila")
+          .setStyle(ButtonStyle.Primary)
       );
 
       await interaction.reply({
@@ -96,34 +98,19 @@ client.on("interactionCreate", async interaction => {
     }
   }
 
-  /* ===== BOTÕES ===== */
-
   if (interaction.isButton()) {
 
-    if (interaction.customId === "modo") {
+    if (interaction.customId === "info") {
       return interaction.reply({
-        content: "Modos disponíveis:\n1x1\n2x2\n3x3\n4x4",
+        content: "Sistema pronto para expandir (modo, tipo, preço, filas automáticas).",
         ephemeral: true
       });
     }
 
-    if (interaction.customId === "tipo") {
-      return interaction.reply({
-        content: "Tipos disponíveis:\nMobile\nMeu\nMisto\nTático\nFull soco",
-        ephemeral: true
-      });
-    }
-
-    if (interaction.customId === "preco") {
-      return interaction.reply({
-        content: "Você poderá configurar até 15 preços diferentes (ex: 0,20 / 5,00 / 10,50)",
-        ephemeral: true
-      });
-    }
   }
 
 });
 
-/* ================= LOGIN ================= */
+/* ================== LOGIN ================== */
 
 client.login(TOKEN);
