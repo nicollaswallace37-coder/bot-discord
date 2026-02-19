@@ -1,12 +1,6 @@
-require("dotenv").config();
-const http = require("http");
-
 const {
   Client,
   GatewayIntentBits,
-  SlashCommandBuilder,
-  Routes,
-  REST,
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
@@ -16,156 +10,108 @@ const {
   PermissionFlagsBits
 } = require("discord.js");
 
-/* ================= CONFIG ================= */
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds]
+});
 
 const TOKEN = process.env.TOKEN;
-const CLIENT_ID = "1473102205115564112";
-const GUILD_ID = "1473169041890742347";
-const OWNER_ID = "1467036179386990593";
-const PORT = process.env.PORT || 3000;
 
-/* ================= SERVIDOR WEB (RENDER FIX) ================= */
-
-http.createServer((req, res) => {
-  res.writeHead(200);
-  res.end("Bot online.");
-}).listen(PORT, "0.0.0.0");
-
-/* ================= CLIENT ================= */
-
-const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
-});
-
-/* ================= DADOS ================= */
+/* ================= CONFIG ================= */
 
 const modos = {
-  "1x1": 2,
-  "2x2": 4,
-  "3x3": 6,
-  "4x4": 8
+  "1v1": 2,
+  "2v2": 4,
+  "3v3": 6,
+  "4v4": 8
 };
 
-const tipos = ["mobile","meu","misto","tático","full soco"];
+const filas = {};
 
-const precos = [
-  "0,20","2,50","5,00","10,00","15,00"
-];
+/* ================= BOT ONLINE ================= */
 
-let filas = {};
-
-/* ================= COMANDO ================= */
-
-const commands = [
-  new SlashCommandBuilder()
-    .setName("painel")
-    .setDescription("Criar painel de fila")
-].map(c => c.toJSON());
-
-const rest = new REST({ version: "10" }).setToken(TOKEN);
-
-client.once("ready", async () => {
-  await rest.put(
-    Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
-    { body: commands }
-  );
-  console.log("Bot online!");
+client.once("ready", () => {
+  console.log(`✅ Logado como ${client.user.tag}`);
 });
 
-/* ================= INTERAÇÕES ================= */
+/* ================= CRIAR FILA ================= */
 
 client.on("interactionCreate", async interaction => {
 
-  /* ===== COMANDO /painel ===== */
-
-  if (interaction.isChatInputCommand()) {
-
-    if (interaction.user.id !== OWNER_ID)
-      return interaction.reply({ content: "Você não pode usar.", ephemeral: true });
-
-    const row1 = new ActionRowBuilder().addComponents(
-      new StringSelectMenuBuilder()
-        .setCustomId("modo_select")
-        .setPlaceholder("Escolha o modo")
-        .addOptions(Object.keys(modos).map(m => ({
-          label: m,
-          value: m
-        })))
-    );
-
-    return interaction.reply({
-      content: "🎮 Selecione o modo:",
-      components: [row1]
-    });
-  }
-
-  /* ===== SELEÇÃO DE MODO ===== */
+  /* ===== MENU MODO ===== */
 
   if (interaction.isStringSelectMenu() && interaction.customId === "modo_select") {
 
     const modo = interaction.values[0];
 
+    const embed = new EmbedBuilder()
+      .setTitle("Escolha o tipo")
+      .setColor("Blue");
+
     const row = new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder()
-        .setCustomId(`tipo_select_${modo}`)
+        .setCustomId(`tipo_${modo}`)
         .setPlaceholder("Escolha o tipo")
-        .addOptions(tipos.map(t => ({
-          label: t,
-          value: t
-        })))
+        .addOptions([
+          { label: "mobile", value: "mobile" },
+          { label: "emu", value: "emu" }, // CORRIGIDO
+          { label: "misto", value: "misto" },
+          { label: "tatico", value: "tatico" },
+          { label: "full soco", value: "full soco" }
+        ])
     );
 
-    return interaction.update({
-      content: `Modo: ${modo}\nEscolha o tipo:`,
-      components: [row]
-    });
+    return interaction.update({ embeds: [embed], components: [row] });
   }
 
-  /* ===== SELEÇÃO DE TIPO ===== */
+  /* ===== MENU TIPO ===== */
 
-  if (interaction.isStringSelectMenu() && interaction.customId.startsWith("tipo_select_")) {
+  if (interaction.isStringSelectMenu() && interaction.customId.startsWith("tipo_")) {
 
-    const modo = interaction.customId.split("_")[2];
+    const modo = interaction.customId.replace("tipo_", "");
     const tipo = interaction.values[0];
 
-    const row = new ActionRowBuilder().addComponents(
-      new StringSelectMenuBuilder()
-        .setCustomId(`preco_select_${modo}_${tipo}`)
-        .setPlaceholder("Escolha o preço")
-        .addOptions(precos.map(p => ({
-          label: `R$ ${p}`,
-          value: p
-        })))
-    );
+    const embed = new EmbedBuilder()
+      .setTitle("Digite os valores separados por vírgula")
+      .setDescription("Exemplo: 0.20, 5.90, 10")
+      .setColor("Blue");
 
-    return interaction.update({
-      content: `Modo: ${modo}\nTipo: ${tipo}\nEscolha o preço:`,
-      components: [row]
-    });
+    filas[interaction.user.id] = { modo, tipo };
+
+    return interaction.reply({ embeds: [embed], ephemeral: true });
   }
 
-  /* ===== SELEÇÃO DE PREÇO ===== */
+});
 
-  if (interaction.isStringSelectMenu() && interaction.customId.startsWith("preco_select_")) {
+/* ================= RECEBER VALORES ================= */
 
-    const parts = interaction.customId.split("_");
-    const modo = parts[2];
-    const tipo = parts[3];
-    const preco = interaction.values[0];
+client.on("messageCreate", async message => {
 
-    const key = `${modo}-${tipo}-${preco}`;
+  if (message.author.bot) return;
+
+  const dados = filas[message.author.id];
+  if (!dados) return;
+
+  const valores = message.content.split(",").map(v => v.trim());
+
+  delete filas[message.author.id];
+
+  for (const valor of valores) {
+
+    const key = `${dados.modo}_${dados.tipo}_${valor}`;
 
     filas[key] = {
-      modo,
-      tipo,
-      preco,
+      modo: dados.modo,
+      tipo: dados.tipo,
+      preco: valor,
       jogadores: []
     };
 
     const embed = new EmbedBuilder()
-      .setTitle(`Fila ${modo}`)
-      .setDescription(`⚔ Tipo: ${tipo}\n💰 Preço: R$ ${preco}\n\n👥 Jogadores:\nNenhum`)
-      .setColor("Blue");
+      .setTitle(`Fila ${dados.modo}`)
+      .setDescription(
+        `⚔ Tipo: ${dados.tipo}\n💰 Valor: R$ ${valor}\n\n👥 Jogadores (0/${modos[dados.modo]}):\nNenhum`
+      )
+      .setColor("Green");
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -178,18 +124,18 @@ client.on("interactionCreate", async interaction => {
         .setStyle(ButtonStyle.Danger)
     );
 
-    return interaction.update({
-      content: "Fila criada!",
-      embeds: [embed],
-      components: [row]
-    });
+    await message.channel.send({ embeds: [embed], components: [row] });
   }
 
-  /* ===== BOTÕES ===== */
+  await message.delete();
+});
+
+/* ================= BOTÕES ================= */
+
+client.on("interactionCreate", async interaction => {
 
   if (!interaction.isButton()) return;
 
-  /* ENTRAR */
   if (interaction.customId.startsWith("entrar_")) {
 
     const key = interaction.customId.replace("entrar_", "");
@@ -206,7 +152,7 @@ client.on("interactionCreate", async interaction => {
 
     fila.jogadores.push(interaction.user.id);
 
-    await atualizarMensagemFila(interaction, fila, key);
+    await atualizarMensagem(interaction, fila, key);
 
     if (fila.jogadores.length === max) {
       await criarPartida(interaction.guild, fila);
@@ -214,7 +160,6 @@ client.on("interactionCreate", async interaction => {
     }
   }
 
-  /* SAIR */
   if (interaction.customId.startsWith("sair_")) {
 
     const key = interaction.customId.replace("sair_", "");
@@ -222,10 +167,10 @@ client.on("interactionCreate", async interaction => {
     if (!fila) return;
 
     fila.jogadores = fila.jogadores.filter(id => id !== interaction.user.id);
-    await atualizarMensagemFila(interaction, fila, key);
+
+    await atualizarMensagem(interaction, fila, key);
   }
 
-  /* ENCERRAR */
   if (interaction.customId === "encerrar_partida") {
 
     if (!interaction.member.roles.cache.some(r => r.name === "Mediador"))
@@ -236,20 +181,20 @@ client.on("interactionCreate", async interaction => {
 
 });
 
-/* ================= FUNÇÕES ================= */
+/* ================= ATUALIZAR EMBED ================= */
 
-async function atualizarMensagemFila(interaction, fila, key) {
+async function atualizarMensagem(interaction, fila, key) {
 
   const max = modos[fila.modo];
 
-  const lista = fila.jogadores.length > 0
+  const lista = fila.jogadores.length
     ? fila.jogadores.map(id => `<@${id}>`).join("\n")
     : "Nenhum";
 
   const embed = new EmbedBuilder()
     .setTitle(`Fila ${fila.modo}`)
     .setDescription(
-      `⚔ Tipo: ${fila.tipo}\n💰 Preço: R$ ${fila.preco}\n\n👥 Jogadores (${fila.jogadores.length}/${max}):\n${lista}`
+      `⚔ Tipo: ${fila.tipo}\n💰 Valor: R$ ${fila.preco}\n\n👥 Jogadores (${fila.jogadores.length}/${max}):\n${lista}`
     )
     .setColor("Blue");
 
@@ -264,11 +209,10 @@ async function atualizarMensagemFila(interaction, fila, key) {
       .setStyle(ButtonStyle.Danger)
   );
 
-  await interaction.update({
-    embeds: [embed],
-    components: [row]
-  });
+  await interaction.update({ embeds: [embed], components: [row] });
 }
+
+/* ================= CRIAR PARTIDA ================= */
 
 async function criarPartida(guild, fila) {
 
@@ -318,7 +262,5 @@ async function criarPartida(guild, fila) {
     components: [row]
   });
 }
-
-/* ================= LOGIN ================= */
 
 client.login(TOKEN);
