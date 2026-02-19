@@ -1,6 +1,6 @@
-/*********
+/***********************
  * SERVIDOR RENDER
- *********/
+ ***********************/
 const express = require("express");
 const app = express();
 
@@ -10,9 +10,9 @@ app.listen(process.env.PORT || 3000, () => {
   console.log("🌐 Servidor web iniciado.");
 });
 
-/*********
+/***********************
  * DISCORD
- *********/
+ ***********************/
 const {
   Client,
   GatewayIntentBits,
@@ -41,9 +41,9 @@ const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
-/*********
+/***********************
  * REGISTRAR SLASH
- *********/
+ ***********************/
 const commands = [
   new SlashCommandBuilder()
     .setName("painel")
@@ -61,9 +61,9 @@ const rest = new REST({ version: "10" }).setToken(TOKEN);
   console.log("✅ Slash registrado");
 })();
 
-/*********
+/***********************
  * CONFIG
- *********/
+ ***********************/
 const modos = {
   "1v1": 2,
   "2v2": 4,
@@ -74,16 +74,16 @@ const modos = {
 const filasTemp = {};
 const filas = {};
 
-/*********
+/***********************
  * BOT ONLINE
- *********/
+ ***********************/
 client.once("ready", () => {
-  console.log(🤖 Logado como ${client.user.tag});
+  console.log(`🤖 Logado como ${client.user.tag}`);
 });
 
-/*********
+/***********************
  * INTERAÇÕES
- *********/
+ ***********************/
 client.on("interactionCreate", async (interaction) => {
   try {
 
@@ -123,7 +123,7 @@ client.on("interactionCreate", async (interaction) => {
 
       const row = new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
-          .setCustomId(tipo_${modo})
+          .setCustomId(`tipo_${modo}`)
           .setPlaceholder("Escolha o tipo")
           .addOptions([
             { label: "mobile", value: "mobile" },
@@ -176,9 +176,9 @@ client.on("interactionCreate", async (interaction) => {
         fila.jogadores = [];
 
         const embed = new EmbedBuilder()
-          .setTitle(Fila ${fila.modo})
+          .setTitle(`Fila ${fila.modo}`)
           .setDescription(
-            ⚔ Tipo: ${fila.tipo}\n💰 Valor: R$ ${fila.preco}\n\n👥 Jogadores (0/${modos[fila.modo]}):\nNenhum
+            `⚔ Tipo: ${fila.tipo}\n💰 Valor: R$ ${fila.preco}\n\n👥 Jogadores (0/${modos[fila.modo]}):\nNenhum`
           )
           .setColor("Green");
 
@@ -219,7 +219,7 @@ client.on("interactionCreate", async (interaction) => {
       });
 
       await interaction.channel.send(
-`💰 *Pagamento Confirmado*
+`💰 **Pagamento Confirmado**
 
 Pix: 450.553.628.98
 Valor: R$ ${valor}`
@@ -253,9 +253,9 @@ Valor: R$ ${valor}`
   }
 });
 
-/*********
+/***********************
  * RECEBER VALORES
- *********/
+ ***********************/
 client.on("messageCreate", async (message) => {
 
   if (message.author.bot) return;
@@ -268,7 +268,7 @@ client.on("messageCreate", async (message) => {
 
   for (const valor of valores) {
 
-    const key = ${dados.modo}_${dados.tipo}_${valor};
+    const key = `${dados.modo}_${dados.tipo}_${valor}`;
 
     filas[key] = {
       modo: dados.modo,
@@ -278,19 +278,19 @@ client.on("messageCreate", async (message) => {
     };
 
     const embed = new EmbedBuilder()
-      .setTitle(Fila ${dados.modo})
+      .setTitle(`Fila ${dados.modo}`)
       .setDescription(
-        ⚔ Tipo: ${dados.tipo}\n💰 Valor: R$ ${valor}\n\n👥 Jogadores (0/${modos[dados.modo]}):\nNenhum
+        `⚔ Tipo: ${dados.tipo}\n💰 Valor: R$ ${valor}\n\n👥 Jogadores (0/${modos[dados.modo]}):\nNenhum`
       )
       .setColor("Green");
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
-        .setCustomId(entrar_${key})
+        .setCustomId(`entrar_${key}`)
         .setLabel("Entrar")
         .setStyle(ButtonStyle.Success),
       new ButtonBuilder()
-        .setCustomId(sair_${key})
+        .setCustomId(`sair_${key}`)
         .setLabel("Sair")
         .setStyle(ButtonStyle.Danger)
     );
@@ -301,30 +301,30 @@ client.on("messageCreate", async (message) => {
   await message.delete();
 });
 
-/*********
+/***********************
  * ATUALIZAR EMBED
- *********/
+ ***********************/
 async function atualizarMensagem(interaction, fila, key) {
 
   const max = modos[fila.modo];
 
   const lista = fila.jogadores.length
-    ? fila.jogadores.map(id => <@${id}>).join("\n")
+    ? fila.jogadores.map(id => `<@${id}>`).join("\n")
     : "Nenhum";
 
   const embed = new EmbedBuilder()
-    .setTitle(Fila ${fila.modo})
+    .setTitle(`Fila ${fila.modo}`)
     .setDescription(
-      ⚔ Tipo: ${fila.tipo}\n💰 Valor: R$ ${fila.preco}\n\n👥 Jogadores (${fila.jogadores.length}/${max}):\n${lista}
+      `⚔ Tipo: ${fila.tipo}\n💰 Valor: R$ ${fila.preco}\n\n👥 Jogadores (${fila.jogadores.length}/${max}):\n${lista}`
     )
     .setColor("Blue");
 
   await interaction.message.edit({ embeds: [embed] });
 }
 
-/*********
+/***********************
  * CRIAR PARTIDA
- *********/
+ ***********************/
 async function criarPartida(guild, fila) {
 
   const categoria = guild.channels.cache.find(
@@ -334,7 +334,7 @@ async function criarPartida(guild, fila) {
   if (!categoria) return;
 
   const canal = await guild.channels.create({
-    name: partida-${fila.modo}-${fila.preco},
+    name: `partida-${fila.modo}-${fila.preco}`,
     type: ChannelType.GuildText,
     parent: categoria.id,
     permissionOverwrites: [
@@ -365,7 +365,7 @@ async function criarPartida(guild, fila) {
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId(confirmar_${fila.preco})
+      .setCustomId(`confirmar_${fila.preco}`)
       .setLabel("Confirmar")
       .setStyle(ButtonStyle.Success),
     new ButtonBuilder()
