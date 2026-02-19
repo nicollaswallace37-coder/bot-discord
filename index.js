@@ -20,7 +20,7 @@ const CLIENT_ID = process.env.CLIENT_ID;
 
 let fila = [];
 const nomeFila = "rush";
-const maxJogadores = 5;
+const maxJogadores = 4;
 
 /* ================= REGISTRAR COMANDO ================= */
 
