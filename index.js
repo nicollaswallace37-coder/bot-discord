@@ -1,17 +1,20 @@
+/***********************
+ * SERVIDOR PARA RENDER
+ ***********************/
 const express = require("express");
 const app = express();
 
-/* ===== SERVIDOR PRA RENDER ===== */
 app.get("/", (req, res) => {
   res.send("Bot online!");
 });
 
 app.listen(process.env.PORT || 3000, () => {
-  console.log("Servidor web iniciado.");
+  console.log("🌐 Servidor web iniciado.");
 });
 
-/* ===== DISCORD ===== */
-
+/***********************
+ * DISCORD
+ ***********************/
 const {
   Client,
   GatewayIntentBits,
@@ -25,13 +28,18 @@ const {
 } = require("discord.js");
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent
+  ]
 });
 
 const TOKEN = process.env.TOKEN;
 
-/* ================= CONFIG ================= */
-
+/***********************
+ * CONFIGURAÇÕES
+ ***********************/
 const modos = {
   "1v1": 2,
   "2v2": 4,
@@ -42,102 +50,117 @@ const modos = {
 const filasTemp = {};
 const filas = {};
 
-/* ================= BOT ONLINE ================= */
-
+/***********************
+ * BOT ONLINE
+ ***********************/
 client.once("ready", () => {
   console.log(`✅ Logado como ${client.user.tag}`);
 });
 
-/* ================= INTERAÇÕES ================= */
+/***********************
+ * INTERAÇÕES
+ ***********************/
+client.on("interactionCreate", async (interaction) => {
+  try {
 
-client.on("interactionCreate", async interaction => {
+    /* ===== MENU MODO ===== */
+    if (interaction.isStringSelectMenu() && interaction.customId === "modo_select") {
 
-  if (interaction.isStringSelectMenu() && interaction.customId === "modo_select") {
+      await interaction.deferUpdate();
 
-    const modo = interaction.values[0];
+      const modo = interaction.values[0];
 
-    const embed = new EmbedBuilder()
-      .setTitle("Escolha o tipo")
-      .setColor("Blue");
+      const embed = new EmbedBuilder()
+        .setTitle("Escolha o tipo")
+        .setColor("Blue");
 
-    const row = new ActionRowBuilder().addComponents(
-      new StringSelectMenuBuilder()
-        .setCustomId(`tipo_${modo}`)
-        .setPlaceholder("Escolha o tipo")
-        .addOptions([
-          { label: "mobile", value: "mobile" },
-          { label: "emu", value: "emu" },
-          { label: "misto", value: "misto" },
-          { label: "tatico", value: "tatico" },
-          { label: "full soco", value: "full soco" }
-        ])
-    );
+      const row = new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId(`tipo_${modo}`)
+          .setPlaceholder("Escolha o tipo")
+          .addOptions([
+            { label: "mobile", value: "mobile" },
+            { label: "emu", value: "emu" },
+            { label: "misto", value: "misto" },
+            { label: "tatico", value: "tatico" },
+            { label: "full soco", value: "full soco" }
+          ])
+      );
 
-    return interaction.update({ embeds: [embed], components: [row] });
-  }
-
-  if (interaction.isStringSelectMenu() && interaction.customId.startsWith("tipo_")) {
-
-    const modo = interaction.customId.replace("tipo_", "");
-    const tipo = interaction.values[0];
-
-    filasTemp[interaction.user.id] = { modo, tipo };
-
-    return interaction.reply({
-      content: "Digite os valores separados por vírgula\nEx: 0.20, 5.90, 10",
-      ephemeral: true
-    });
-  }
-
-  if (!interaction.isButton()) return;
-
-  if (interaction.customId.startsWith("entrar_")) {
-
-    const key = interaction.customId.replace("entrar_", "");
-    const fila = filas[key];
-    if (!fila) return;
-
-    if (fila.jogadores.includes(interaction.user.id))
-      return interaction.reply({ content: "Você já está na fila!", ephemeral: true });
-
-    const max = modos[fila.modo];
-
-    if (fila.jogadores.length >= max)
-      return interaction.reply({ content: "Fila cheia!", ephemeral: true });
-
-    fila.jogadores.push(interaction.user.id);
-
-    await atualizarMensagem(interaction, fila, key);
-
-    if (fila.jogadores.length === max) {
-      await criarPartida(interaction.guild, fila);
-      fila.jogadores = [];
+      return interaction.editReply({ embeds: [embed], components: [row] });
     }
-  }
 
-  if (interaction.customId.startsWith("sair_")) {
+    /* ===== MENU TIPO ===== */
+    if (interaction.isStringSelectMenu() && interaction.customId.startsWith("tipo_")) {
 
-    const key = interaction.customId.replace("sair_", "");
-    const fila = filas[key];
-    if (!fila) return;
+      await interaction.deferReply({ ephemeral: true });
 
-    fila.jogadores = fila.jogadores.filter(id => id !== interaction.user.id);
+      const modo = interaction.customId.replace("tipo_", "");
+      const tipo = interaction.values[0];
 
-    await atualizarMensagem(interaction, fila, key);
-  }
+      filasTemp[interaction.user.id] = { modo, tipo };
 
-  if (interaction.customId === "encerrar_partida") {
+      return interaction.editReply({
+        content: "Digite os valores separados por vírgula\nEx: 0.20, 5.90, 10"
+      });
+    }
 
-    if (!interaction.member.roles.cache.some(r => r.name === "Mediador"))
-      return interaction.reply({ content: "Apenas Mediador pode encerrar.", ephemeral: true });
+    if (!interaction.isButton()) return;
 
-    await interaction.channel.delete();
+    await interaction.deferUpdate();
+
+    /* ===== ENTRAR ===== */
+    if (interaction.customId.startsWith("entrar_")) {
+
+      const key = interaction.customId.replace("entrar_", "");
+      const fila = filas[key];
+      if (!fila) return;
+
+      if (fila.jogadores.includes(interaction.user.id)) return;
+
+      const max = modos[fila.modo];
+      if (fila.jogadores.length >= max) return;
+
+      fila.jogadores.push(interaction.user.id);
+
+      await atualizarMensagem(interaction, fila, key);
+
+      if (fila.jogadores.length === max) {
+        await criarPartida(interaction.guild, fila);
+        fila.jogadores = [];
+      }
+    }
+
+    /* ===== SAIR ===== */
+    if (interaction.customId.startsWith("sair_")) {
+
+      const key = interaction.customId.replace("sair_", "");
+      const fila = filas[key];
+      if (!fila) return;
+
+      fila.jogadores = fila.jogadores.filter(id => id !== interaction.user.id);
+
+      await atualizarMensagem(interaction, fila, key);
+    }
+
+    /* ===== ENCERRAR ===== */
+    if (interaction.customId === "encerrar_partida") {
+
+      if (!interaction.member.roles.cache.some(r => r.name === "Mediador"))
+        return;
+
+      await interaction.channel.delete();
+    }
+
+  } catch (err) {
+    console.log("Erro na interação:", err);
   }
 });
 
-/* ================= RECEBER VALORES ================= */
-
-client.on("messageCreate", async message => {
+/***********************
+ * RECEBER VALORES
+ ***********************/
+client.on("messageCreate", async (message) => {
 
   if (message.author.bot) return;
 
@@ -183,8 +206,9 @@ client.on("messageCreate", async message => {
   await message.delete();
 });
 
-/* ================= ATUALIZAR EMBED ================= */
-
+/***********************
+ * ATUALIZAR EMBED
+ ***********************/
 async function atualizarMensagem(interaction, fila, key) {
 
   const max = modos[fila.modo];
@@ -211,11 +235,12 @@ async function atualizarMensagem(interaction, fila, key) {
       .setStyle(ButtonStyle.Danger)
   );
 
-  await interaction.update({ embeds: [embed], components: [row] });
+  await interaction.editReply({ embeds: [embed], components: [row] });
 }
 
-/* ================= CRIAR PARTIDA ================= */
-
+/***********************
+ * CRIAR PARTIDA
+ ***********************/
 async function criarPartida(guild, fila) {
 
   const categoria = guild.channels.cache.find(
