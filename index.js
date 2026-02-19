@@ -38,7 +38,7 @@ const client = new Client({
 
 const filas = new Map();
 
-// ================= REGISTRAR COMANDO =================
+// ================= COMANDO =================
 
 const commands = [
   new SlashCommandBuilder()
@@ -61,10 +61,14 @@ client.once("ready", async () => {
 
   try {
     await rest.put(
-      Routes.applicationCommands(client.user.id),
+      Routes.applicationGuildCommands(
+        client.user.id,
+        "1473169041890742347"
+      ),
       { body: commands }
     );
-    console.log("✅ Comando /criarfila registrado.");
+
+    console.log("✅ Comando /criarfila registrado no servidor!");
   } catch (error) {
     console.error(error);
   }
@@ -74,7 +78,6 @@ client.once("ready", async () => {
 
 client.on("interactionCreate", async (interaction) => {
 
-  // ===== COMANDO =====
   if (interaction.isChatInputCommand()) {
 
     if (interaction.commandName === "criarfila") {
@@ -113,7 +116,6 @@ client.on("interactionCreate", async (interaction) => {
     }
   }
 
-  // ===== BOTÕES =====
   if (interaction.isButton()) {
 
     const [acao, nomeFila] = interaction.customId.split("_");
@@ -126,7 +128,6 @@ client.on("interactionCreate", async (interaction) => {
       });
     }
 
-    // ENTRAR
     if (acao === "entrar") {
 
       if (fila.jogadores.includes(interaction.user.id)) {
@@ -158,7 +159,6 @@ client.on("interactionCreate", async (interaction) => {
       }
     }
 
-    // SAIR
     if (acao === "sair") {
 
       fila.jogadores = fila.jogadores.filter(
@@ -173,7 +173,6 @@ client.on("interactionCreate", async (interaction) => {
       });
     }
 
-    // ENCERRAR SALA
     if (acao === "encerrar") {
 
       if (!interaction.member.roles.cache.some(r => r.name === "Mediador")) {
