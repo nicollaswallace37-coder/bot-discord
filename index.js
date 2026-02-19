@@ -1,12 +1,26 @@
+/***********************
+ * EXPRESS (Render)
+ ***********************/
+const express = require("express");
+const app = express();
+
+app.get("/", (req, res) => res.send("Bot online"));
+app.listen(process.env.PORT || 3000);
+
+
+/***********************
+ * DISCORD
+ ***********************/
 const {
   Client,
   GatewayIntentBits,
   ChannelType,
+  EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
   Events,
-  PermissionsBitField
+  PermissionFlagsBits
 } = require("discord.js");
 
 const client = new Client({
@@ -16,22 +30,25 @@ const client = new Client({
   ]
 });
 
-const TOKEN = "SEU_TOKEN_AQUI";
+const TOKEN = process.env.TOKEN;
 
 const filas = {};
 
-/* ================= READY ================= */
 
+/***********************
+ * READY
+ ***********************/
 client.once("ready", () => {
   console.log(`🔥 Logado como ${client.user.tag}`);
 });
 
 
-/* ================= CRIAR PARTIDA ================= */
+/***********************
+ * CRIAR PARTIDA
+ ***********************/
+async function criarPartida(guild, key) {
 
-async function criarPartida(guild, filaKey) {
-
-  const fila = filas[filaKey];
+  const fila = filas[key];
   if (!fila) return;
 
   const categoria = guild.channels.cache.find(
@@ -47,7 +64,7 @@ async function criarPartida(guild, filaKey) {
     permissionOverwrites: [
       {
         id: guild.roles.everyone,
-        deny: [PermissionsBitField.Flags.ViewChannel]
+        deny: [PermissionFlagsBits.ViewChannel]
       }
     ]
   });
@@ -62,6 +79,7 @@ async function criarPartida(guild, filaKey) {
 
   // liberar mediador
   const mediador = guild.roles.cache.find(r => r.name === "Mediador");
+
   if (mediador) {
     await canal.permissionOverwrites.create(mediador.id, {
       ViewChannel: true,
@@ -82,88 +100,111 @@ async function criarPartida(guild, filaKey) {
   );
 
   await canal.send({
-    content: `🎮 **Partida criada!**\n⚔ ${fila.modo}\n💰 Valor: R$ ${fila.preco}`,
+    content: `🎮 **Partida criada!**
+⚔ ${fila.modo}
+💰 Valor: R$ ${fila.preco}`,
     components: [row]
   });
 
+  // limpa jogadores da fila
   fila.jogadores = [];
 }
 
 
-/* ================= INTERAÇÕES ================= */
-
+/***********************
+ * INTERAÇÕES
+ ***********************/
 client.on(Events.InteractionCreate, async interaction => {
 
-  if (interaction.isButton()) {
+  if (!interaction.isButton()) return;
 
-    /* ===== ENTRAR NA FILA ===== */
-    if (interaction.customId.startsWith("fila_")) {
+  /* ================= ENTRAR NA FILA ================= */
+  if (interaction.customId.startsWith("fila_")) {
 
-      const key = interaction.customId;
+    const [_, modo, preco] = interaction.customId.split("_");
+    const key = interaction.customId;
 
-      if (!filas[key]) {
-        filas[key] = {
-          modo: key.split("_")[1],
-          preco: key.split("_")[2],
-          jogadores: []
-        };
-      }
+    if (!filas[key]) {
+      filas[key] = {
+        modo: modo,
+        preco: preco,
+        jogadores: []
+      };
+    }
 
-      const fila = filas[key];
+    const fila = filas[key];
 
-      if (fila.jogadores.includes(interaction.user.id))
-        return interaction.reply({
-          content: "❌ Você já está nessa fila.",
-          ephemeral: true
-        });
-
-      fila.jogadores.push(interaction.user.id);
-
-      await interaction.reply({
-        content: `✅ Você entrou na fila (${fila.jogadores.length}/2)`,
+    if (fila.jogadores.includes(interaction.user.id)) {
+      return interaction.reply({
+        content: "❌ Você já está na fila.",
         ephemeral: true
       });
-
-      if (fila.jogadores.length >= 2) {
-        await criarPartida(interaction.guild, key);
-      }
     }
 
+    fila.jogadores.push(interaction.user.id);
 
-    /* ===== CONFIRMAR PAGAMENTO ===== */
-    if (interaction.customId.startsWith("confirmar_")) {
+    await interaction.reply({
+      content: `✅ Você entrou na fila (${fila.jogadores.length}/2)`,
+      ephemeral: true
+    });
 
-      if (!interaction.member.roles.cache.some(r => r.name === "Mediador"))
-        return interaction.reply({
-          content: "❌ Apenas ADM pode usar este botão.",
-          ephemeral: true
-        });
+    // FECHOU FILA
+    if (fila.jogadores.length >= 2) {
+      await criarPartida(interaction.guild, key);
+    }
+  }
 
-      const valor = interaction.customId.replace("confirmar_", "");
 
+  /* ================= CONFIRMAR PAGAMENTO ================= */
+  if (interaction.customId.startsWith("confirmar_")) {
+
+    if (!interaction.member.roles.cache.some(r => r.name === "Mediador")) {
       return interaction.reply({
-        content: `💰 **Pagamento Confirmado**\n\nPix: 450.553.628.98\nValor: R$ ${valor}`
+        content: "❌ Apenas Mediadores podem usar.",
+        ephemeral: true
       });
     }
 
+    const valor = interaction.customId.replace("confirmar_", "");
 
-    /* ===== ENCERRAR CHAT ===== */
-    if (interaction.customId === "encerrar_chat") {
+    await interaction.channel.send(
+`💰 **Pagamento Confirmado**
 
-      if (!interaction.member.roles.cache.some(r => r.name === "Mediador"))
-        return interaction.reply({
-          content: "❌ Apenas ADM pode encerrar.",
-          ephemeral: true
-        });
+Pix: 450.553.628.98
+Valor: R$ ${valor}`
+    );
 
-      await interaction.channel.delete();
+    return interaction.reply({
+      content: "✅ Pagamento confirmado.",
+      ephemeral: true
+    });
+  }
+
+
+  /* ================= ENCERRAR CHAT ================= */
+  if (interaction.customId === "encerrar_chat") {
+
+    if (!interaction.member.roles.cache.some(r => r.name === "Mediador")) {
+      return interaction.reply({
+        content: "❌ Apenas Mediadores podem encerrar.",
+        ephemeral: true
+      });
     }
 
+    await interaction.reply({
+      content: "🗑 Encerrando partida...",
+      ephemeral: true
+    });
+
+    setTimeout(() => {
+      interaction.channel.delete().catch(() => {});
+    }, 1500);
   }
 
 });
 
 
-/* ================= LOGIN ================= */
-
+/***********************
+ * LOGIN
+ ***********************/
 client.login(TOKEN);
