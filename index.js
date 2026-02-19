@@ -1,10 +1,9 @@
 /***********************
- * SERVIDOR RENDER
+ * EXPRESS (Render)
  ***********************/
 const express = require("express");
 const app = express();
-
-app.get("/", (req, res) => res.send("Bot online!"));
+app.get("/", (req, res) => res.send("Bot online"));
 app.listen(process.env.PORT || 3000);
 
 /***********************
@@ -39,12 +38,12 @@ const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
 /***********************
- * SLASH
+ * SLASH COMMAND
  ***********************/
 const commands = [
   new SlashCommandBuilder()
     .setName("painel")
-    .setDescription("Abrir painel")
+    .setDescription("Abrir painel de criação")
     .toJSON()
 ];
 
@@ -64,6 +63,9 @@ const modos = { "1v1": 2, "2v2": 4, "3v3": 6, "4v4": 8 };
 const filasTemp = {};
 const filas = {};
 
+/***********************
+ * READY
+ ***********************/
 client.once("ready", () => {
   console.log("Bot online");
 });
@@ -74,38 +76,38 @@ client.once("ready", () => {
 client.on("interactionCreate", async (interaction) => {
   try {
 
+    /* SLASH */
     if (interaction.isChatInputCommand()) {
-      if (interaction.commandName === "painel") {
 
-        if (!interaction.member.roles.cache.some(r =>
-          r.name.toLowerCase() === "mediador"
-        )) {
-          return interaction.reply({
-            content: "❌ Apenas mediador pode usar.",
-            ephemeral: true
-          });
-        }
-
-        const row = new ActionRowBuilder().addComponents(
-          new StringSelectMenuBuilder()
-            .setCustomId("modo_select")
-            .setPlaceholder("Escolha o modo")
-            .addOptions([
-              { label: "1v1", value: "1v1" },
-              { label: "2v2", value: "2v2" },
-              { label: "3v3", value: "3v3" },
-              { label: "4v4", value: "4v4" }
-            ])
-        );
-
+      if (!interaction.member.roles.cache.some(r =>
+        r.name.toLowerCase() === "mediador"
+      )) {
         return interaction.reply({
-          content: "Escolha o modo:",
-          components: [row],
+          content: "❌ Apenas mediador.",
           ephemeral: true
         });
       }
+
+      const row = new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId("modo_select")
+          .setPlaceholder("Escolha o modo")
+          .addOptions(
+            Object.keys(modos).map(m => ({
+              label: m,
+              value: m
+            }))
+          )
+      );
+
+      return interaction.reply({
+        content: "Escolha o modo:",
+        components: [row],
+        ephemeral: true
+      });
     }
 
+    /* SELECT */
     if (interaction.isStringSelectMenu()) {
 
       if (interaction.customId === "modo_select") {
@@ -139,16 +141,104 @@ client.on("interactionCreate", async (interaction) => {
         filasTemp[interaction.user.id] = { modo, tipo };
 
         return interaction.update({
-          content: "Digite os valores separados por vírgula (Ex: 10, 20)",
+          content: "Digite os valores separados por vírgula (ex: 10, 20)",
           components: []
         });
       }
     }
 
-    if (!interaction.isButton()) return;
+    /* BOTÃO ENTRAR */
+    if (interaction.isButton() && interaction.customId.startsWith("entrar_")) {
+
+      await interaction.deferUpdate();
+
+      const key = interaction.customId.replace("entrar_", "");
+      const fila = filas[key];
+      if (!fila) return;
+
+      if (fila.jogadores.includes(interaction.user.id)) return;
+
+      fila.jogadores.push(interaction.user.id);
+
+      const max = modos[fila.modo];
+
+      const embed = new EmbedBuilder()
+        .setTitle(`Fila ${fila.modo}`)
+        .setDescription(
+          `Tipo: ${fila.tipo}
+Valor: R$ ${fila.preco}
+
+Jogadores (${fila.jogadores.length}/${max})
+${fila.jogadores.map(id => `<@${id}>`).join("\n")}`
+        );
+
+      await interaction.message.edit({ embeds: [embed] });
+
+      /* Se lotar cria canal */
+      if (fila.jogadores.length >= max) {
+
+        const guild = interaction.guild;
+        const mediador = guild.roles.cache.find(r =>
+          r.name.toLowerCase() === "mediador"
+        );
+
+        const canal = await guild.channels.create({
+          name: `partida-${fila.modo}-${fila.preco}`,
+          type: ChannelType.GuildText,
+          permissionOverwrites: [
+            {
+              id: guild.roles.everyone.id,
+              deny: [PermissionFlagsBits.ViewChannel]
+            },
+            ...fila.jogadores.map(id => ({
+              id,
+              allow: [
+                PermissionFlagsBits.ViewChannel,
+                PermissionFlagsBits.SendMessages
+              ]
+            })),
+            {
+              id: mediador.id,
+              allow: [
+                PermissionFlagsBits.ViewChannel,
+                PermissionFlagsBits.SendMessages
+              ]
+            }
+          ]
+        });
+
+        await canal.send(
+`🎮 Partida criada!
+⚔ ${fila.modo}
+📌 Tipo: ${fila.tipo}
+💰 Valor: R$ ${fila.preco}
+
+👥 Jogadores:
+${fila.jogadores.map(id => `<@${id}>`).join("\n")}`
+        );
+
+        const row = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`confirmar_${fila.preco}`)
+            .setLabel("Confirmar")
+            .setStyle(ButtonStyle.Success),
+          new ButtonBuilder()
+            .setCustomId("encerrar_partida")
+            .setLabel("Encerrar Chat")
+            .setStyle(ButtonStyle.Danger)
+        );
+
+        await canal.send({
+          content: `🔐 Painel do Mediador`,
+          components: [row]
+        });
+
+        delete filas[key];
+      }
+    }
 
     /* CONFIRMAR */
-    if (interaction.customId.startsWith("confirmar_")) {
+    if (interaction.isButton() && interaction.customId.startsWith("confirmar_")) {
 
       if (!interaction.member.roles.cache.some(r =>
         r.name.toLowerCase() === "mediador"
@@ -158,18 +248,16 @@ client.on("interactionCreate", async (interaction) => {
 
       const valor = interaction.customId.replace("confirmar_", "");
 
-      await interaction.reply({
-        content: "✅ Pagamento confirmado!",
-        ephemeral: true
-      });
+      await interaction.reply({ content: "Pagamento confirmado.", ephemeral: true });
 
       await interaction.channel.send(
-        `💰 Pix: 450.553.628.98\nValor: R$ ${valor}`
+        `💰 Pix: 450.553.628.98
+Valor: R$ ${valor}`
       );
     }
 
     /* ENCERRAR */
-    if (interaction.customId === "encerrar_partida") {
+    if (interaction.isButton() && interaction.customId === "encerrar_partida") {
 
       if (!interaction.member.roles.cache.some(r =>
         r.name.toLowerCase() === "mediador"
@@ -190,7 +278,7 @@ client.on("interactionCreate", async (interaction) => {
 });
 
 /***********************
- * MENSAGENS
+ * MESSAGE CREATE
  ***********************/
 client.on("messageCreate", async (message) => {
 
@@ -216,7 +304,10 @@ client.on("messageCreate", async (message) => {
     const embed = new EmbedBuilder()
       .setTitle(`Fila ${dados.modo}`)
       .setDescription(
-        `Tipo: ${dados.tipo}\nValor: R$ ${valor}\n\nJogadores (0/${modos[dados.modo]})`
+        `Tipo: ${dados.tipo}
+Valor: R$ ${valor}
+
+Jogadores (0/${modos[dados.modo]})`
       );
 
     const row = new ActionRowBuilder().addComponents(
