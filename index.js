@@ -4,9 +4,7 @@
 const express = require("express");
 const app = express();
 
-app.get("/", (req, res) => {
-  res.send("Bot online!");
-});
+app.get("/", (req, res) => res.send("Bot online!"));
 
 app.listen(process.env.PORT || 3000, () => {
   console.log("🌐 Servidor web iniciado.");
@@ -55,15 +53,11 @@ const commands = [
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
 (async () => {
-  try {
-    await rest.put(
-      Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
-      { body: commands }
-    );
-    console.log("✅ Slash registrado");
-  } catch (err) {
-    console.log(err);
-  }
+  await rest.put(
+    Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+    { body: commands }
+  );
+  console.log("✅ Slash registrado");
 })();
 
 /***********************
@@ -92,7 +86,7 @@ client.once("ready", () => {
 client.on("interactionCreate", async (interaction) => {
   try {
 
-    /* ===== SLASH /painel ===== */
+    /* ===== SLASH ===== */
     if (interaction.isChatInputCommand()) {
       if (interaction.commandName === "painel") {
 
@@ -113,16 +107,12 @@ client.on("interactionCreate", async (interaction) => {
             ])
         );
 
-        return interaction.reply({
-          embeds: [embed],
-          components: [row]
-        });
+        return interaction.reply({ embeds: [embed], components: [row] });
       }
     }
 
     /* ===== MENU MODO ===== */
     if (interaction.isStringSelectMenu() && interaction.customId === "modo_select") {
-
       await interaction.deferUpdate();
       const modo = interaction.values[0];
 
@@ -148,7 +138,6 @@ client.on("interactionCreate", async (interaction) => {
 
     /* ===== MENU TIPO ===== */
     if (interaction.isStringSelectMenu() && interaction.customId.startsWith("tipo_")) {
-
       await interaction.deferReply({ ephemeral: true });
 
       const modo = interaction.customId.replace("tipo_", "");
@@ -157,12 +146,11 @@ client.on("interactionCreate", async (interaction) => {
       filasTemp[interaction.user.id] = { modo, tipo };
 
       return interaction.editReply({
-        content: "Digite os valores separados por vírgula\nEx: 0.20, 5.90, 10"
+        content: "Digite os valores separados por vírgula\nEx: 10, 20"
       });
     }
 
     if (!interaction.isButton()) return;
-
     await interaction.deferUpdate();
 
     /* ===== ENTRAR ===== */
@@ -174,16 +162,25 @@ client.on("interactionCreate", async (interaction) => {
 
       if (fila.jogadores.includes(interaction.user.id)) return;
 
-      const max = modos[fila.modo];
-      if (fila.jogadores.length >= max) return;
-
       fila.jogadores.push(interaction.user.id);
 
       await atualizarMensagem(interaction, fila, key);
 
-      if (fila.jogadores.length === max) {
+      if (fila.jogadores.length === modos[fila.modo]) {
+
         await criarPartida(interaction.guild, fila);
+
+        // 🔥 RECRIAR FILA AUTOMATICAMENTE
         fila.jogadores = [];
+
+        const embed = new EmbedBuilder()
+          .setTitle(`Fila ${fila.modo}`)
+          .setDescription(
+            `⚔ Tipo: ${fila.tipo}\n💰 Valor: R$ ${fila.preco}\n\n👥 Jogadores (0/${modos[fila.modo]}):\nNenhum`
+          )
+          .setColor("Green");
+
+        await interaction.message.edit({ embeds: [embed] });
       }
     }
 
@@ -195,13 +192,11 @@ client.on("interactionCreate", async (interaction) => {
       if (!fila) return;
 
       fila.jogadores = fila.jogadores.filter(id => id !== interaction.user.id);
-
       await atualizarMensagem(interaction, fila, key);
     }
 
-    /* ===== ENCERRAR PARTIDA ===== */
+    /* ===== ENCERRAR ===== */
     if (interaction.customId === "encerrar_partida") {
-
       if (!interaction.member.roles.cache.some(r => r.name === "Mediador"))
         return;
 
@@ -279,21 +274,7 @@ async function atualizarMensagem(interaction, fila, key) {
     )
     .setColor("Blue");
 
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`entrar_${key}`)
-      .setLabel("Entrar")
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId(`sair_${key}`)
-      .setLabel("Sair")
-      .setStyle(ButtonStyle.Danger)
-  );
-
-  await interaction.message.edit({
-    embeds: [embed],
-    components: [row]
-  });
+  await interaction.message.edit({ embeds: [embed] });
 }
 
 /***********************
@@ -310,42 +291,10 @@ async function criarPartida(guild, fila) {
   const canal = await guild.channels.create({
     name: `partida-${fila.modo}-${fila.preco}`,
     type: ChannelType.GuildText,
-    parent: categoria.id,
-    permissionOverwrites: [
-      {
-        id: guild.roles.everyone,
-        deny: [PermissionFlagsBits.ViewChannel]
-      }
-    ]
+    parent: categoria.id
   });
 
-  for (const id of fila.jogadores) {
-    await canal.permissionOverwrites.create(id, {
-      ViewChannel: true,
-      SendMessages: true
-    });
-  }
-
-  const mediador = guild.roles.cache.find(r => r.name === "Mediador");
-
-  if (mediador) {
-    await canal.permissionOverwrites.create(mediador.id, {
-      ViewChannel: true,
-      SendMessages: true
-    });
-  }
-
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId("encerrar_partida")
-      .setLabel("Encerrar Partida")
-      .setStyle(ButtonStyle.Danger)
-  );
-
-  await canal.send({
-    content: `🎮 Partida criada!\n⚔ ${fila.modo}\n💰 R$ ${fila.preco}`,
-    components: [row]
-  });
+  await canal.send(`🎮 Partida criada!\n⚔ ${fila.modo}\n💰 R$ ${fila.preco}`);
 }
 
 client.login(TOKEN);
