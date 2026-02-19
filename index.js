@@ -87,7 +87,6 @@ client.once("ready", () => {
 client.on("interactionCreate", async (interaction) => {
   try {
 
-    /* ===== SLASH ===== */
     if (interaction.isChatInputCommand()) {
       if (interaction.commandName === "painel") {
 
@@ -112,14 +111,9 @@ client.on("interactionCreate", async (interaction) => {
       }
     }
 
-    /* ===== MENU MODO ===== */
     if (interaction.isStringSelectMenu() && interaction.customId === "modo_select") {
       await interaction.deferUpdate();
       const modo = interaction.values[0];
-
-      const embed = new EmbedBuilder()
-        .setTitle("Escolha o tipo")
-        .setColor("Blue");
 
       const row = new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
@@ -134,10 +128,9 @@ client.on("interactionCreate", async (interaction) => {
           ])
       );
 
-      return interaction.message.edit({ embeds: [embed], components: [row] });
+      return interaction.message.edit({ components: [row] });
     }
 
-    /* ===== MENU TIPO ===== */
     if (interaction.isStringSelectMenu() && interaction.customId.startsWith("tipo_")) {
       await interaction.deferReply({ ephemeral: true });
 
@@ -151,10 +144,8 @@ client.on("interactionCreate", async (interaction) => {
       });
     }
 
-    /* ===== BOTÕES ===== */
     if (!interaction.isButton()) return;
 
-    /* ===== ENTRAR ===== */
     if (interaction.customId.startsWith("entrar_")) {
 
       await interaction.deferUpdate();
@@ -166,27 +157,17 @@ client.on("interactionCreate", async (interaction) => {
       if (fila.jogadores.includes(interaction.user.id)) return;
 
       fila.jogadores.push(interaction.user.id);
-
-      await atualizarMensagem(interaction, fila, key);
+      await atualizarMensagem(interaction, fila);
 
       if (fila.jogadores.length === modos[fila.modo]) {
 
         await criarPartida(interaction.guild, fila);
 
         fila.jogadores = [];
-
-        const embed = new EmbedBuilder()
-          .setTitle(`Fila ${fila.modo}`)
-          .setDescription(
-            `⚔ Tipo: ${fila.tipo}\n💰 Valor: R$ ${fila.preco}\n\n👥 Jogadores (0/${modos[fila.modo]}):\nNenhum`
-          )
-          .setColor("Green");
-
-        await interaction.message.edit({ embeds: [embed] });
+        await atualizarMensagem(interaction, fila);
       }
     }
 
-    /* ===== SAIR ===== */
     if (interaction.customId.startsWith("sair_")) {
 
       await interaction.deferUpdate();
@@ -196,27 +177,18 @@ client.on("interactionCreate", async (interaction) => {
       if (!fila) return;
 
       fila.jogadores = fila.jogadores.filter(id => id !== interaction.user.id);
-      await atualizarMensagem(interaction, fila, key);
+      await atualizarMensagem(interaction, fila);
     }
 
-    /* ===== CONFIRMAR PAGAMENTO ===== */
     if (interaction.customId.startsWith("confirmar_")) {
 
       if (!interaction.member.roles.cache.some(r =>
         r.name.toLowerCase() === "mediador"
       )) {
-        return interaction.reply({
-          content: "❌ Apenas mediadores podem usar.",
-          ephemeral: true
-        });
+        return interaction.reply({ content: "❌ Apenas mediadores.", ephemeral: true });
       }
 
       const valor = interaction.customId.replace("confirmar_", "");
-
-      await interaction.reply({
-        content: "✅ Pagamento confirmado.",
-        ephemeral: true
-      });
 
       await interaction.channel.send(
 `💰 **Pagamento Confirmado**
@@ -224,24 +196,19 @@ client.on("interactionCreate", async (interaction) => {
 Pix: 450.553.628.98
 Valor: R$ ${valor}`
       );
+
+      await interaction.reply({ content: "✅ Confirmado.", ephemeral: true });
     }
 
-    /* ===== ENCERRAR PARTIDA ===== */
     if (interaction.customId === "encerrar_partida") {
 
       if (!interaction.member.roles.cache.some(r =>
         r.name.toLowerCase() === "mediador"
       )) {
-        return interaction.reply({
-          content: "❌ Apenas mediadores podem encerrar.",
-          ephemeral: true
-        });
+        return interaction.reply({ content: "❌ Apenas mediadores.", ephemeral: true });
       }
 
-      await interaction.reply({
-        content: "🗑 Encerrando partida...",
-        ephemeral: true
-      });
+      await interaction.reply({ content: "🗑 Encerrando...", ephemeral: true });
 
       setTimeout(() => {
         interaction.channel.delete().catch(() => {});
@@ -249,7 +216,7 @@ Valor: R$ ${valor}`
     }
 
   } catch (err) {
-    console.log("Erro:", err);
+    console.log(err);
   }
 });
 
@@ -304,7 +271,7 @@ client.on("messageCreate", async (message) => {
 /***********************
  * ATUALIZAR EMBED
  ***********************/
-async function atualizarMensagem(interaction, fila, key) {
+async function atualizarMensagem(interaction, fila) {
 
   const max = modos[fila.modo];
 
@@ -323,7 +290,7 @@ async function atualizarMensagem(interaction, fila, key) {
 }
 
 /***********************
- * CRIAR PARTIDA
+ * CRIAR PARTIDA (CORRIGIDO)
  ***********************/
 async function criarPartida(guild, fila) {
 
@@ -363,23 +330,37 @@ async function criarPartida(guild, fila) {
     });
   }
 
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`confirmar_${fila.preco}`)
-      .setLabel("Confirmar")
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId("encerrar_partida")
-      .setLabel("Encerrar Chat")
-      .setStyle(ButtonStyle.Danger)
+  // mensagem normal
+  await canal.send(
+`🎮 **Partida criada!**
+⚔ ${fila.modo}
+📌 Tipo: ${fila.tipo}
+💰 Valor: R$ ${fila.preco}
+
+👥 Jogadores:
+${fila.jogadores.map(id => `<@${id}>`).join("\n")}`
   );
 
-  await canal.send({
-    content: `🎮 Partida criada!
-⚔ ${fila.modo}
-💰 Valor: R$ ${fila.preco}`,
-    components: [row]
-  });
+  // painel só mediador
+  if (mediador) {
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`confirmar_${fila.preco}`)
+        .setLabel("Confirmar")
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId("encerrar_partida")
+        .setLabel("Encerrar Chat")
+        .setStyle(ButtonStyle.Danger)
+    );
+
+    await canal.send({
+      content: `🔐 <@&${mediador.id}> Painel do Mediador`,
+      components: [row],
+      allowedMentions: { roles: [mediador.id] }
+    });
+  }
 }
 
 client.login(TOKEN);
