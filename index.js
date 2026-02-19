@@ -146,7 +146,7 @@ client.on('interactionCreate', async interaction => {
   // ================= BUTTONS =================
   if (interaction.isButton()) {
 
-    // BOTÃO ENCERRAR (não depende da fila do canal original)
+    // ENCERRAR PARTIDA
     if (interaction.customId === 'encerrar_partida') {
 
       if (!interaction.member.roles.cache.some(r => r.name === "mediador")) {
@@ -161,7 +161,7 @@ client.on('interactionCreate', async interaction => {
       return interaction.reply({ content: 'Use /painel primeiro.', ephemeral: true });
     }
 
-    // ===== DEFINIR PREÇO =====
+    // DEFINIR PREÇO
     if (interaction.customId === 'config_preco') {
 
       const modal = new ModalBuilder()
@@ -179,7 +179,7 @@ client.on('interactionCreate', async interaction => {
       return interaction.showModal(modal);
     }
 
-    // ===== CRIAR FILA =====
+    // CRIAR FILA
     if (interaction.customId === 'criar_fila') {
 
       if (!fila.tipo || !fila.modo || fila.precos.length === 0) {
@@ -201,13 +201,18 @@ client.on('interactionCreate', async interaction => {
         .setLabel('Entrar na Fila')
         .setStyle(ButtonStyle.Primary);
 
+      const sair = new ButtonBuilder()
+        .setCustomId('sair_fila')
+        .setLabel('Sair da Fila')
+        .setStyle(ButtonStyle.Danger);
+
       return interaction.reply({
         embeds: [embed],
-        components: [new ActionRowBuilder().addComponents(entrar)]
+        components: [new ActionRowBuilder().addComponents(entrar, sair)]
       });
     }
 
-    // ===== ENTRAR NA FILA =====
+    // ENTRAR NA FILA
     if (interaction.customId === 'entrar_fila') {
 
       if (fila.jogadores.includes(interaction.user.id)) {
@@ -215,7 +220,6 @@ client.on('interactionCreate', async interaction => {
       }
 
       fila.jogadores.push(interaction.user.id);
-
       await interaction.reply({ content: 'Você entrou na fila!', ephemeral: true });
 
       const limite = limitePorModo(fila.modo);
@@ -223,7 +227,6 @@ client.on('interactionCreate', async interaction => {
       if (fila.jogadores.length >= limite) {
 
         const participantes = fila.jogadores.splice(0, limite);
-
         const mediadorRole = interaction.guild.roles.cache.find(r => r.name === "mediador");
         if (!mediadorRole) return;
 
@@ -261,6 +264,18 @@ client.on('interactionCreate', async interaction => {
           components: [new ActionRowBuilder().addComponents(encerrar)]
         });
       }
+    }
+
+    // SAIR DA FILA
+    if (interaction.customId === 'sair_fila') {
+
+      if (!fila.jogadores.includes(interaction.user.id)) {
+        return interaction.reply({ content: 'Você não está na fila.', ephemeral: true });
+      }
+
+      fila.jogadores = fila.jogadores.filter(id => id !== interaction.user.id);
+
+      return interaction.reply({ content: 'Você saiu da fila!', ephemeral: true });
     }
   }
 
