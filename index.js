@@ -38,7 +38,7 @@ const client = new Client({
 const TOKEN = process.env.TOKEN;
 
 /***********************
- * CONFIGURAÇÕES
+ * CONFIG
  ***********************/
 const modos = {
   "1v1": 2,
@@ -87,7 +87,7 @@ client.on("interactionCreate", async (interaction) => {
           ])
       );
 
-      return interaction.editReply({ embeds: [embed], components: [row] });
+      return interaction.message.edit({ embeds: [embed], components: [row] });
     }
 
     /* ===== MENU TIPO ===== */
@@ -235,7 +235,10 @@ async function atualizarMensagem(interaction, fila, key) {
       .setStyle(ButtonStyle.Danger)
   );
 
-  await interaction.editReply({ embeds: [embed], components: [row] });
+  await interaction.message.edit({
+    embeds: [embed],
+    components: [row]
+  });
 }
 
 /***********************
