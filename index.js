@@ -1,243 +1,343 @@
-require("dotenv").config();
-
+/***********************
+ * EXPRESS (Render)
+ ***********************/
 const express = require("express");
 const app = express();
-const PORT = process.env.PORT || 3000;
+app.get("/", (req, res) => res.send("Bot online"));
+app.listen(process.env.PORT || 3000);
 
-app.get("/", (req, res) => {
-  res.send("Bot online ✅");
-});
-
-app.listen(PORT, () => {
-  console.log("🌐 Servidor rodando na porta", PORT);
-});
-
+/***********************
+ * DISCORD
+ ***********************/
 const {
   Client,
   GatewayIntentBits,
-  ChannelType,
-  PermissionsBitField,
+  EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  SlashCommandBuilder,
+  StringSelectMenuBuilder,
+  ChannelType,
+  PermissionFlagsBits,
   REST,
-  Routes
+  Routes,
+  SlashCommandBuilder
 } = require("discord.js");
+
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.MessageContent
+  ]
+});
 
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers
-  ]
-});
-
-// ===================== COMANDOS =====================
+/***********************
+ * SLASH
+ ***********************/
 const commands = [
-
-  // 🔹 FILA PÚBLICA (igual antes)
   new SlashCommandBuilder()
-    .setName("fila")
-    .setDescription("Criar fila pública"),
-
-  // 🔹 FILA PRIVADA
-  new SlashCommandBuilder()
-    .setName("fila_treino")
-    .setDescription("Criar treino privado")
-    .addStringOption(option =>
-      option.setName("modo")
-        .setDescription("Modo do treino")
-        .setRequired(true)
-        .addChoices(
-          { name: "1x1", value: "1x1" },
-          { name: "2x2", value: "2x2" },
-          { name: "3x3", value: "3x3" },
-          { name: "4x4", value: "4x4" },
-          { name: "Misto Tático", value: "misto" },
-          { name: "Full Soco", value: "fullsoco" }
-        )
-    )
-
-].map(cmd => cmd.toJSON());
+    .setName("painel")
+    .setDescription("Abrir painel")
+    .toJSON()
+];
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
-client.once("ready", async () => {
-  console.log(`🤖 Online como ${client.user.tag}`);
-
+(async () => {
   await rest.put(
     Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
     { body: commands }
   );
+})();
 
-  console.log("✅ Comandos registrados.");
+/***********************
+ * CONFIG
+ ***********************/
+const modos = { "1v1": 2, "2v2": 4, "3v3": 6, "4v4": 8 };
+const filasTemp = {};
+const filas = {};
+
+/***********************
+ * READY
+ ***********************/
+client.once("ready", () => {
+  console.log("Bot online");
 });
 
-// ===================== INTERAÇÕES =====================
-client.on("interactionCreate", async interaction => {
+/***********************
+ * INTERAÇÕES
+ ***********************/
+client.on("interactionCreate", async (interaction) => {
+  try {
 
-  if (!interaction.inGuild()) return;
+    /* SLASH */
+    if (interaction.isChatInputCommand()) {
 
-  // ================= FILA PÚBLICA =================
-  if (interaction.isChatInputCommand() && interaction.commandName === "fila") {
-    return interaction.reply({
-      content: "📢 Fila criada! Aguardando jogadores...",
-      ephemeral: false
-    });
-  }
-
-  // ================= FILA PRIVADA =================
-  if (interaction.isChatInputCommand() && interaction.commandName === "fila_treino") {
-
-    try {
-
-      const modo = interaction.options.getString("modo");
-
-      if (!interaction.guild.members.me.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
-        return interaction.reply({
-          content: "❌ Preciso da permissão Gerenciar Canais.",
-          ephemeral: true
-        });
+      if (!interaction.member.roles.cache.some(r =>
+        r.name.toLowerCase() === "mediador"
+      )) {
+        return interaction.reply({ content: "❌ Apenas mediador.", ephemeral: true });
       }
-
-      // 🔒 Categoria privada
-      const categoria = await interaction.guild.channels.create({
-        name: `🎮 Treino ${modo}`,
-        type: ChannelType.GuildCategory,
-        permissionOverwrites: [
-          {
-            id: interaction.guild.roles.everyone.id,
-            deny: [PermissionsBitField.Flags.ViewChannel]
-          },
-          {
-            id: interaction.guild.members.me.id,
-            allow: [
-              PermissionsBitField.Flags.ViewChannel,
-              PermissionsBitField.Flags.SendMessages,
-              PermissionsBitField.Flags.ManageChannels
-            ]
-          },
-          {
-            id: interaction.user.id,
-            allow: [
-              PermissionsBitField.Flags.ViewChannel,
-              PermissionsBitField.Flags.SendMessages
-            ]
-          }
-        ]
-      });
-
-      const canal = await interaction.guild.channels.create({
-        name: `🎮 partida-${modo}`,
-        type: ChannelType.GuildText,
-        parent: categoria.id
-      });
-
-      await canal.setTopic(`criador:${interaction.user.id}`);
-
-      const jogadores = [];
 
       const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("entrar_privado")
-          .setLabel("Entrar")
-          .setStyle(ButtonStyle.Success),
-
-        new ButtonBuilder()
-          .setCustomId("sair_privado")
-          .setLabel("Sair")
-          .setStyle(ButtonStyle.Secondary),
-
-        new ButtonBuilder()
-          .setCustomId("encerrar_treino")
-          .setLabel("Encerrar")
-          .setStyle(ButtonStyle.Danger)
+        new StringSelectMenuBuilder()
+          .setCustomId("modo_select")
+          .setPlaceholder("Escolha o modo")
+          .addOptions(
+            Object.keys(modos).map(m => ({ label: m, value: m }))
+          )
       );
 
-      await canal.send({
-        content: `🎮 **Treino ${modo} iniciado!**
-
-Jogadores:
-Nenhum ainda.
-
-Terminando o treino clique em Encerrar.
-Bom treino 💪`,
-        components: [row]
-      });
-
-      await interaction.reply({
-        content: `✅ Treino ${modo} criado.`,
-        ephemeral: true
-      });
-
-    } catch (error) {
-      console.error("Erro ao criar treino:", error);
-    }
-  }
-
-  // ================= BOTÕES =================
-  if (interaction.isButton()) {
-
-    const canal = interaction.channel;
-    const categoria = canal.parent;
-
-    // 🔹 ENTRAR
-    if (interaction.customId === "entrar_privado") {
-
-      await canal.permissionOverwrites.edit(interaction.user.id, {
-        ViewChannel: true,
-        SendMessages: true
-      });
-
-      await interaction.reply({
-        content: "✅ Você entrou no treino.",
+      return interaction.reply({
+        content: "Escolha o modo:",
+        components: [row],
         ephemeral: true
       });
     }
 
-    // 🔹 SAIR
-    if (interaction.customId === "sair_privado") {
+    /* SELECT */
+    if (interaction.isStringSelectMenu()) {
 
-      await canal.permissionOverwrites.delete(interaction.user.id)
-        .catch(() => {});
+      if (interaction.customId === "modo_select") {
 
-      await interaction.reply({
-        content: "❌ Você saiu do treino.",
-        ephemeral: true
-      });
-    }
+        const modo = interaction.values[0];
 
-    // 🔹 ENCERRAR
-    if (interaction.customId === "encerrar_treino") {
+        const row = new ActionRowBuilder().addComponents(
+          new StringSelectMenuBuilder()
+            .setCustomId(`tipo_${modo}`)
+            .setPlaceholder("Escolha o tipo")
+            .addOptions([
+              { label: "mobile", value: "mobile" },
+              { label: "emu", value: "emu" },
+              { label: "misto", value: "misto" },
+              { label: "tatico", value: "tatico" },
+              { label: "full soco", value: "full soco" }
+            ])
+        );
 
-      const isMediador = interaction.member.roles.cache.some(
-        r => r.name.toLowerCase() === "mediador"
-      );
+        return interaction.update({
+          content: "Escolha o tipo:",
+          components: [row]
+        });
+      }
 
-      const criadorId = canal.topic?.replace("criador:", "");
-      const isCriador = criadorId === interaction.user.id;
+      if (interaction.customId.startsWith("tipo_")) {
 
-      if (isMediador || isCriador) {
+        const modo = interaction.customId.replace("tipo_", "");
+        const tipo = interaction.values[0];
 
-        await canal.delete().catch(() => {});
+        filasTemp[interaction.user.id] = { modo, tipo };
 
-        if (categoria && categoria.children.cache.size === 0) {
-          await categoria.delete().catch(() => {});
-        }
-
-      } else {
-        await interaction.reply({
-          content: "❌ Você não pode encerrar esse treino.",
-          ephemeral: true
+        return interaction.update({
+          content: "Digite os valores separados por vírgula (ex: 10,20)",
+          components: []
         });
       }
     }
-  }
 
+    /* BOTÃO ENTRAR */
+    if (interaction.isButton() && interaction.customId.startsWith("entrar_")) {
+
+      await interaction.deferUpdate();
+
+      const key = interaction.customId.replace("entrar_", "");
+      const fila = filas[key];
+      if (!fila) return;
+
+      if (fila.jogadores.includes(interaction.user.id)) return;
+
+      fila.jogadores.push(interaction.user.id);
+
+      const max = modos[fila.modo];
+
+      const embed = new EmbedBuilder()
+        .setTitle(`Fila ${fila.modo}`)
+        .setDescription(
+`Tipo: ${fila.tipo}
+Valor: R$ ${fila.preco}
+
+Jogadores (${fila.jogadores.length}/${max})
+${fila.jogadores.map(id => `<@${id}>`).join("\n")}`
+        );
+
+      await interaction.message.edit({ embeds: [embed] });
+
+      /* SE LOTAR */
+      if (fila.jogadores.length >= max) {
+
+        const guild = interaction.guild;
+
+        const categoria = guild.channels.cache.find(c =>
+          c.name === "rush" && c.type === ChannelType.GuildCategory
+        );
+
+        const mediador = guild.roles.cache.find(r =>
+          r.name.toLowerCase() === "mediador"
+        );
+
+        const canal = await guild.channels.create({
+          name: `partida-${fila.modo}-${fila.preco}`,
+          type: ChannelType.GuildText,
+          parent: categoria ? categoria.id : null,
+          permissionOverwrites: [
+            {
+              id: guild.roles.everyone.id,
+              deny: [PermissionFlagsBits.ViewChannel]
+            },
+            ...fila.jogadores.map(id => ({
+              id,
+              allow: [
+                PermissionFlagsBits.ViewChannel,
+                PermissionFlagsBits.SendMessages
+              ]
+            })),
+            {
+              id: mediador.id,
+              allow: [
+                PermissionFlagsBits.ViewChannel,
+                PermissionFlagsBits.SendMessages
+              ]
+            }
+          ]
+        });
+
+        await canal.send(
+`🎮 Partida criada!
+⚔ ${fila.modo}
+📌 Tipo: ${fila.tipo}
+💰 Valor: R$ ${fila.preco}
+
+👥 Jogadores:
+${fila.jogadores.map(id => `<@${id}>`).join("\n")}`
+        );
+
+        /* PAINEL APENAS MEDIADOR */
+        const row = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`confirmar_${fila.preco}`)
+            .setLabel("Confirmar")
+            .setStyle(ButtonStyle.Success),
+          new ButtonBuilder()
+            .setCustomId("encerrar_partida")
+            .setLabel("Encerrar Chat")
+            .setStyle(ButtonStyle.Danger)
+        );
+
+        await canal.send({
+          content: `<@&${mediador.id}> Painel do Mediador`,
+          components: [row],
+          allowedMentions: { roles: [mediador.id] }
+        });
+
+        /* CRIA NOVA FILA AUTOMÁTICA */
+        fila.jogadores = [];
+
+        const novoEmbed = new EmbedBuilder()
+          .setTitle(`Fila ${fila.modo}`)
+          .setDescription(
+`Tipo: ${fila.tipo}
+Valor: R$ ${fila.preco}
+
+Jogadores (0/${max})`
+          );
+
+        await interaction.message.edit({ embeds: [novoEmbed] });
+      }
+    }
+
+    /* CONFIRMAR */
+    if (interaction.isButton() && interaction.customId.startsWith("confirmar_")) {
+
+      if (!interaction.member.roles.cache.some(r =>
+        r.name.toLowerCase() === "mediador"
+      )) {
+        return interaction.reply({ content: "❌ Apenas mediador.", ephemeral: true });
+      }
+
+      const valor = interaction.customId.replace("confirmar_", "");
+
+      await interaction.reply({ content: "Pagamento confirmado.", ephemeral: true });
+
+      await interaction.channel.send(
+`💰 Pix: 450.553.628.98
+Valor: R$ ${valor}`
+      );
+    }
+
+    /* ENCERRAR */
+    if (interaction.isButton() && interaction.customId === "encerrar_partida") {
+
+      if (!interaction.member.roles.cache.some(r =>
+        r.name.toLowerCase() === "mediador"
+      )) {
+        return interaction.reply({ content: "❌ Apenas mediador.", ephemeral: true });
+      }
+
+      await interaction.reply({ content: "Encerrando...", ephemeral: true });
+
+      setTimeout(() => {
+        interaction.channel.delete().catch(() => {});
+      }, 1500);
+    }
+
+  } catch (err) {
+    console.log(err);
+  }
 });
 
+/***********************
+ * MESSAGE CREATE
+ ***********************/
+client.on("messageCreate", async (message) => {
+
+  if (message.author.bot) return;
+
+  const dados = filasTemp[message.author.id];
+  if (!dados) return;
+
+  const valores = message.content.split(",").map(v => v.trim());
+  delete filasTemp[message.author.id];
+
+  for (const valor of valores) {
+
+    const key = `${dados.modo}_${dados.tipo}_${valor}`;
+
+    filas[key] = {
+      modo: dados.modo,
+      tipo: dados.tipo,
+      preco: valor,
+      jogadores: []
+    };
+
+    const embed = new EmbedBuilder()
+      .setTitle(`Fila ${dados.modo}`)
+      .setDescription(
+`Tipo: ${dados.tipo}
+Valor: R$ ${valor}
+
+Jogadores (0/${modos[dados.modo]})`
+      );
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`entrar_${key}`)
+        .setLabel("Entrar")
+        .setStyle(ButtonStyle.Success)
+    );
+
+    await message.channel.send({ embeds: [embed], components: [row] });
+  }
+
+  await message.delete();
+});
+
+/***********************
+ * LOGIN
+ ***********************/
 client.login(TOKEN);
