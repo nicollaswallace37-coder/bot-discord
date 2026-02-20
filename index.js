@@ -19,10 +19,18 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
 
+
 // =============================
-// REGISTRAR COMANDO
+// REGISTRAR COMANDOS
 // =============================
 const commands = [
+
+  // COMANDO /fila (antigo)
+  new SlashCommandBuilder()
+    .setName("fila")
+    .setDescription("Comando principal da fila"),
+
+  // COMANDO /fila_treino (novo)
   new SlashCommandBuilder()
     .setName("fila_treino")
     .setDescription("Criar treino")
@@ -39,7 +47,8 @@ const commands = [
           { name: "Full Soco", value: "fullsoco" }
         )
     )
-].map(command => command.toJSON());
+
+].map(cmd => cmd.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
@@ -49,11 +58,12 @@ const rest = new REST({ version: "10" }).setToken(TOKEN);
       Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
       { body: commands }
     );
-    console.log("✅ Comando registrado.");
+    console.log("✅ Comandos registrados.");
   } catch (error) {
     console.error(error);
   }
 })();
+
 
 // =============================
 // BOT ONLINE
@@ -62,19 +72,31 @@ client.once("ready", () => {
   console.log(`🤖 Online como ${client.user.tag}`);
 });
 
+
 // =============================
 // INTERAÇÕES
 // =============================
 client.on("interactionCreate", async interaction => {
 
-  // =============================
-  // CRIAR TREINO
-  // =============================
+  // ============================
+  // /fila (ANTIGO)
+  // ============================
+  if (interaction.isChatInputCommand() && interaction.commandName === "fila") {
+
+    await interaction.reply({
+      content: "✅ Comando /fila funcionando normalmente.",
+      ephemeral: true
+    });
+  }
+
+
+  // ============================
+  // /fila_treino
+  // ============================
   if (interaction.isChatInputCommand() && interaction.commandName === "fila_treino") {
 
     const modo = interaction.options.getString("modo");
 
-    // Permissões iniciais (somente criador vê)
     const permissionOverwrites = [
       {
         id: interaction.guild.roles.everyone,
@@ -89,21 +111,18 @@ client.on("interactionCreate", async interaction => {
       }
     ];
 
-    // Criar categoria
     const categoria = await interaction.guild.channels.create({
       name: `Treino ${modo}`,
       type: ChannelType.GuildCategory,
       permissionOverwrites
     });
 
-    // Criar canal dentro da categoria
     const canal = await interaction.guild.channels.create({
       name: `partida-${modo}`,
       type: ChannelType.GuildText,
       parent: categoria.id
     });
 
-    // Botão encerrar
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("encerrar_treino")
@@ -112,21 +131,22 @@ client.on("interactionCreate", async interaction => {
     );
 
     await canal.send({
-      content: `🎮 **Treino ${modo} iniciado!**
+      content: `🎮 Treino ${modo} iniciado!
 
 Terminando o treino clica no botão encerrar treino, bom treino.`,
       components: [row]
     });
 
     await interaction.reply({
-      content: `✅ Treino ${modo} criado com sucesso!`,
+      content: `✅ Treino ${modo} criado.`,
       ephemeral: true
     });
   }
 
-  // =============================
-  // ENCERRAR TREINO
-  // =============================
+
+  // ============================
+  // BOTÃO ENCERRAR
+  // ============================
   if (interaction.isButton() && interaction.customId === "encerrar_treino") {
 
     const isMediador = interaction.member.roles.cache.some(
@@ -141,10 +161,10 @@ Terminando o treino clica no botão encerrar treino, bom treino.`,
 
       await interaction.channel.delete().catch(() => {});
 
-      // Deletar categoria se ficar vazia
       if (categoria && categoria.children.cache.size === 0) {
         await categoria.delete().catch(() => {});
       }
+
     } else {
       await interaction.reply({
         content: "❌ Você não pode encerrar esse treino.",
