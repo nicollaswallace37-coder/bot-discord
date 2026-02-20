@@ -1,5 +1,18 @@
 require("dotenv").config();
 const express = require("express");
+const {
+  Client,
+  GatewayIntentBits,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  PermissionsBitField,
+  ChannelType,
+  REST,
+  Routes,
+  SlashCommandBuilder
+} = require("discord.js");
 
 /* ================= SERVIDOR PRA RENDER ================= */
 
@@ -14,18 +27,7 @@ app.listen(PORT, "0.0.0.0", () => {
   console.log("🌐 Servidor rodando na porta:", PORT);
 });
 
-/* ================= DISCORD ================= */
-
-const {
-  Client,
-  GatewayIntentBits,
-  EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  PermissionsBitField,
-  ChannelType
-} = require("discord.js");
+/* ================= CLIENT ================= */
 
 const client = new Client({
   intents: [
@@ -36,6 +38,7 @@ const client = new Client({
 });
 
 const TOKEN = process.env.TOKEN;
+const CLIENT_ID = process.env.CLIENT_ID;
 
 const filas = {};
 
@@ -49,69 +52,112 @@ const precos = {
   "2x2": 20
 };
 
-client.once("ready", () => {
+/* ================= REGISTRAR COMANDOS ================= */
+
+async function registrarComandos() {
+
+  const commands = [
+    new SlashCommandBuilder()
+      .setName("fila")
+      .setDescription("Criar fila normal")
+      .addStringOption(option =>
+        option.setName("modo")
+          .setDescription("Modo da partida")
+          .setRequired(true)
+          .addChoices(
+            { name: "1x1", value: "1x1" },
+            { name: "2x2", value: "2x2" }
+          ))
+      .addStringOption(option =>
+        option.setName("tipo")
+          .setDescription("Tipo da partida")
+          .setRequired(true)
+          .addChoices(
+            { name: "Mobile", value: "Mobile" },
+            { name: "Emulador", value: "Emulador" }
+          )),
+
+    new SlashCommandBuilder()
+      .setName("fila_treino")
+      .setDescription("Criar fila treino")
+      .addStringOption(option =>
+        option.setName("modo")
+          .setDescription("Modo da partida")
+          .setRequired(true)
+          .addChoices(
+            { name: "1x1", value: "1x1" },
+            { name: "2x2", value: "2x2" }
+          ))
+      .addStringOption(option =>
+        option.setName("tipo")
+          .setDescription("Tipo da partida")
+          .setRequired(true)
+          .addChoices(
+            { name: "Mobile", value: "Mobile" },
+            { name: "Emulador", value: "Emulador" }
+          ))
+  ].map(cmd => cmd.toJSON());
+
+  const rest = new REST({ version: "10" }).setToken(TOKEN);
+
+  try {
+    console.log("🔄 Registrando comandos...");
+    await rest.put(
+      Routes.applicationCommands(CLIENT_ID),
+      { body: commands }
+    );
+    console.log("✅ Comandos registrados!");
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+/* ================= READY ================= */
+
+client.once("ready", async () => {
   console.log("🤖 Bot online!");
+  await registrarComandos();
 });
+
+/* ================= INTERAÇÕES ================= */
 
 client.on("interactionCreate", async interaction => {
 
-  /* ================= COMANDO /fila ================= */
+  /* ================= COMANDOS ================= */
 
-  if (interaction.isChatInputCommand() && interaction.commandName === "fila") {
+  if (interaction.isChatInputCommand()) {
 
     const modo = interaction.options.getString("modo");
     const tipo = interaction.options.getString("tipo");
 
-    const id = `${modo}_${Date.now()}`;
+    if (!modo || !tipo) {
+      return interaction.reply({
+        content: "Erro: modo ou tipo inválido.",
+        ephemeral: true
+      });
+    }
+
+    const id = `${interaction.commandName}_${modo}_${Date.now()}`;
 
     filas[id] = {
       modo,
       tipo,
       jogadores: [],
-      treino: false
+      treino: interaction.commandName === "fila_treino"
     };
 
-    const embed = new EmbedBuilder()
-      .setTitle(`Fila ${modo}`)
-      .setDescription(
-`Tipo: ${tipo}
-Valor: R$ ${precos[modo]}
-
-Jogadores (0/${modos[modo]})`
-      );
-
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`entrar_${id}`)
-        .setLabel("Entrar")
-        .setStyle(ButtonStyle.Success)
-    );
-
-    await interaction.reply({ embeds: [embed], components: [row] });
-  }
-
-  /* ================= COMANDO /fila_treino ================= */
-
-  if (interaction.isChatInputCommand() && interaction.commandName === "fila_treino") {
-
-    const modo = interaction.options.getString("modo");
-    const tipo = interaction.options.getString("tipo");
-
-    const id = `treino_${modo}_${Date.now()}`;
-
-    filas[id] = {
-      modo,
-      tipo,
-      jogadores: [],
-      treino: true
-    };
+    const max = modos[modo];
 
     const embed = new EmbedBuilder()
-      .setTitle(`Fila Treino ${modo}`)
+      .setTitle(
+        interaction.commandName === "fila_treino"
+          ? `🔥 Fila Treino ${modo}`
+          : `💰 Fila ${modo}`
+      )
       .setDescription(
 `Tipo: ${tipo}
-
-Jogadores (0/${modos[modo]})`
+${interaction.commandName === "fila" ? `Valor: R$ ${precos[modo]}\n` : ""}
+Jogadores (0/${max})`
       );
 
     const row = new ActionRowBuilder().addComponents(
@@ -139,28 +185,14 @@ Jogadores (0/${modos[modo]})`
 
     const max = modos[fila.modo];
 
-    let embed;
-
-    if (fila.treino) {
-      embed = new EmbedBuilder()
-        .setTitle(`Fila Treino ${fila.modo}`)
-        .setDescription(
+    const embed = new EmbedBuilder()
+      .setTitle(fila.treino ? `🔥 Fila Treino ${fila.modo}` : `💰 Fila ${fila.modo}`)
+      .setDescription(
 `Tipo: ${fila.tipo}
-
+${!fila.treino ? `Valor: R$ ${precos[fila.modo]}\n` : ""}
 Jogadores (${fila.jogadores.length}/${max})
 ${fila.jogadores.map(id => `<@${id}>`).join("\n")}`
-        );
-    } else {
-      embed = new EmbedBuilder()
-        .setTitle(`Fila ${fila.modo}`)
-        .setDescription(
-`Tipo: ${fila.tipo}
-Valor: R$ ${precos[fila.modo]}
-
-Jogadores (${fila.jogadores.length}/${max})
-${fila.jogadores.map(id => `<@${id}>`).join("\n")}`
-        );
-    }
+      );
 
     await interaction.update({ embeds: [embed] });
 
@@ -169,82 +201,30 @@ ${fila.jogadores.map(id => `<@${id}>`).join("\n")}`
     const nomeCategoria = fila.treino ? "rush treino" : "rush";
 
     const categoria = interaction.guild.channels.cache.find(
-      c =>
-        c.type === ChannelType.GuildCategory &&
-        c.name.toLowerCase() === nomeCategoria
+      c => c.type === ChannelType.GuildCategory &&
+      c.name.toLowerCase() === nomeCategoria
     );
 
-    if (!categoria)
+    if (!categoria) {
       return interaction.followUp({
         content: `Categoria "${nomeCategoria}" não encontrada.`,
         ephemeral: true
       });
+    }
 
     const canal = await interaction.guild.channels.create({
       name: `partida-${fila.modo}`,
       type: ChannelType.GuildText,
-      parent: categoria.id,
-      permissionOverwrites: [
-        {
-          id: interaction.guild.id,
-          deny: [PermissionsBitField.Flags.ViewChannel]
-        },
-        ...fila.jogadores.map(id => ({
-          id,
-          allow: [PermissionsBitField.Flags.ViewChannel]
-        }))
-      ]
+      parent: categoria.id
     });
 
-    if (fila.treino) {
-
-      const rowTreino = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`encerrar_${id}`)
-          .setLabel("Encerrar Treino")
-          .setStyle(ButtonStyle.Danger)
-      );
-
-      await canal.send({
-        content: "Finalizando o treino, por favor encerrar o treino.",
-        components: [rowTreino]
-      });
-
-    } else {
-
-      const rowConfirmar = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`confirmar_${id}`)
-          .setLabel("Confirmar")
-          .setStyle(ButtonStyle.Primary)
-      );
-
-      await canal.send({
-        content: "Aguardando confirmação do pagamento.",
-        components: [rowConfirmar]
-      });
-    }
+    await canal.send(
+      fila.treino
+        ? "Treino iniciado! 🔥"
+        : "Aguardando confirmação de pagamento 💰"
+    );
 
     delete filas[id];
-  }
-
-  /* ================= BOTÃO CONFIRMAR ================= */
-
-  if (interaction.isButton() && interaction.customId.startsWith("confirmar_")) {
-
-    if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator))
-      return interaction.reply({ content: "Só ADM pode usar.", ephemeral: true });
-
-    await interaction.reply({
-      content: `Pix: 450.553.628.98`,
-      ephemeral: false
-    });
-  }
-
-  /* ================= BOTÃO ENCERRAR TREINO ================= */
-
-  if (interaction.isButton() && interaction.customId.startsWith("encerrar_")) {
-    await interaction.channel.delete();
   }
 
 });
