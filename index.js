@@ -36,46 +36,20 @@ const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 const PIX = "450.553.628.98";
 
-/****************************************************************/
-/*********************** CONFIG *********************************/
-/****************************************************************/
-
 const MODOS = { "1x1": 2, "2x2": 4, "3x3": 6, "4x4": 8 };
-
-/****************************************************************/
-/*********************** FILA NORMAL ****************************/
-/****************************************************************/
 
 const filas = {};
 const filasTemp = {};
 const partidasAtivas = {};
 
-function calcularTaxa(valor) {
-const numero = parseFloat(valor);
-if (numero <= 0.70) return numero + 0.20;
-return numero + numero * 0.20;
-}
-
-/****************************************************************/
-/*********************** FILA TREINO ****************************/
-/****************************************************************/
-
 const filasTreino = new Map();
 const configTempTreino = new Map();
 
-/****************************************************************/
-/*********************** SLASH *********************************/
-/****************************************************************/
+/**************** SLASH ****************/
 
 const commands = [
-{
-name: "painel",
-description: "Abrir painel"
-},
-{
-name: "fila-treino",
-description: "Criar fila treino"
-}
+{ name: "painel", description: "Abrir painel" },
+{ name: "fila-treino", description: "Criar fila treino" }
 ];
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -91,14 +65,12 @@ client.once("ready", () => {
 console.log(`✅ Bot online como ${client.user.tag}`);
 });
 
-/****************************************************************/
-/*********************** INTERAÇÕES *****************************/
-/****************************************************************/
+/**************** INTERAÇÕES ****************/
 
 client.on("interactionCreate", async (interaction) => {
 try {
 
-/**************** COMANDO PAINEL (NORMAL) ****************/
+/************* COMANDO PAINEL *************/
 if (interaction.isChatInputCommand() && interaction.commandName === "painel") {
 
 const row = new ActionRowBuilder().addComponents(
@@ -120,12 +92,11 @@ ephemeral: true
 });
 }
 
-/**************** COMANDO FILA TREINO ****************/
+/************* COMANDO TREINO *************/
 if (interaction.isChatInputCommand() && interaction.commandName === "fila-treino") {
 
 const modoMenu = new StringSelectMenuBuilder()
 .setCustomId("modo_select_treino")
-.setPlaceholder("Selecione o modo")
 .addOptions(
 { label: "1x1", value: "1x1" },
 { label: "2x2", value: "2x2" },
@@ -135,7 +106,6 @@ const modoMenu = new StringSelectMenuBuilder()
 
 const tipoMenu = new StringSelectMenuBuilder()
 .setCustomId("tipo_select_treino")
-.setPlaceholder("Selecione o tipo")
 .addOptions(
 { label: "Mobile", value: "Mobile" },
 { label: "Emu", value: "Emu" },
@@ -159,66 +129,40 @@ new ActionRowBuilder().addComponents(criarBtn)
 });
 }
 
-/**************** SELECT NORMAL ****************/
-if (interaction.isStringSelectMenu()) {
-
-if (interaction.customId === "modo_select_normal") {
-
-const modo = interaction.values[0];
-
-const row = new ActionRowBuilder().addComponents(
-new StringSelectMenuBuilder()
-.setCustomId(`tipo_normal_${modo}`)
-.setPlaceholder("Escolha o tipo")
-.addOptions(
-{ label: "mobile", value: "mobile" },
-{ label: "emu", value: "emu" },
-{ label: "misto", value: "misto" },
-{ label: "tatico", value: "tatico" },
-{ label: "full soco", value: "full soco" }
-)
-);
-
-return interaction.update({
-content: "Escolha o tipo:",
-components: [row]
-});
-}
-
-if (interaction.customId.startsWith("tipo_normal_")) {
-
-const modo = interaction.customId.replace("tipo_normal_", "");
-const tipo = interaction.values[0];
-
-filasTemp[interaction.user.id] = { modo, tipo };
-
-return interaction.update({
-content: "Digite os valores separados por vírgula (ex: 1,2,5)",
-components: []
-});
-}
-
-/**************** SELECT TREINO ****************/
-
-if (!configTempTreino.has(interaction.user.id))
-configTempTreino.set(interaction.user.id, {});
-
-const data = configTempTreino.get(interaction.user.id);
-
-if (interaction.customId === "modo_select_treino")
-data.modo = interaction.values[0];
-
-if (interaction.customId === "tipo_select_treino")
-data.tipo = interaction.values[0];
-
-configTempTreino.set(interaction.user.id, data);
-return interaction.deferUpdate();
-}
-
-/**************** BOTÕES ****************/
+/************* BOTÕES *************/
 if (interaction.isButton()) {
 
-/************** CRIAR FILA TREINO **************/
+/***** ENTRAR NORMAL *****/
+if (interaction.customId.startsWith("entrar_") && !interaction.customId.includes("treino")) {
+
+await interaction.deferUpdate();
+
+const key = interaction.customId.replace("entrar_", "");
+const fila = filas[key];
+if (!fila) return;
+
+if (!fila.jogadores.includes(interaction.user.id) && fila.jogadores.length < MODOS[fila.modo]) {
+fila.jogadores.push(interaction.user.id);
+}
+
+await atualizarMensagemFila(interaction.message, fila);
+}
+
+/***** SAIR NORMAL *****/
+if (interaction.customId.startsWith("sair_") && !interaction.customId.includes("treino")) {
+
+await interaction.deferUpdate();
+
+const key = interaction.customId.replace("sair_", "");
+const fila = filas[key];
+if (!fila) return;
+
+fila.jogadores = fila.jogadores.filter(id => id !== interaction.user.id);
+
+await atualizarMensagemFila(interaction.message, fila);
+}
+
+/***** CRIAR TREINO *****/
 if (interaction.customId === "criar_fila_treino") {
 
 const data = configTempTreino.get(interaction.user.id);
@@ -252,19 +196,20 @@ components: [new ActionRowBuilder().addComponents(entrar, sair)]
 return interaction.reply({ content: "✅ Fila criada!", ephemeral: true });
 }
 
-/************** ENTRAR TREINO **************/
+/***** ENTRAR TREINO *****/
 if (interaction.customId.startsWith("entrar_treino_")) {
+
+await interaction.deferUpdate();
 
 const filaId = interaction.customId.split("_")[2];
 const fila = filasTreino.get(filaId);
 if (!fila) return;
 
-if (fila.jogadores.includes(interaction.user.id))
-return interaction.reply({ content: "Você já está na fila!", ephemeral: true });
-
+if (!fila.jogadores.includes(interaction.user.id) && fila.jogadores.length < fila.max) {
 fila.jogadores.push(interaction.user.id);
+}
 
-await interaction.update({
+await interaction.message.edit({
 content: gerarMensagemTreino(fila),
 components: interaction.message.components
 });
@@ -279,8 +224,10 @@ components: interaction.message.components
 }
 }
 
-/************** SAIR TREINO **************/
+/***** SAIR TREINO *****/
 if (interaction.customId.startsWith("sair_treino_")) {
+
+await interaction.deferUpdate();
 
 const filaId = interaction.customId.split("_")[2];
 const fila = filasTreino.get(filaId);
@@ -288,54 +235,14 @@ if (!fila) return;
 
 fila.jogadores = fila.jogadores.filter(id => id !== interaction.user.id);
 
-await interaction.update({
+await interaction.message.edit({
 content: gerarMensagemTreino(fila),
 components: interaction.message.components
 });
 }
 
-/************** ENCERRAR TREINO **************/
+/***** ENCERRAR TREINO *****/
 if (interaction.customId.startsWith("encerrar_treino_")) {
-return interaction.channel.delete();
-}
-
-/************** CONFIRMAR NORMAL **************/
-if (interaction.customId === "confirmar_pagamento") {
-
-const mediador = partidasAtivas[interaction.channel.id];
-if (interaction.user.id !== mediador)
-return interaction.reply({ content: "Apenas o mediador pode usar.", ephemeral: true });
-
-const modal = new ModalBuilder()
-.setCustomId("modal_sala")
-.setTitle("Lançar Sala");
-
-modal.addComponents(
-new ActionRowBuilder().addComponents(
-new TextInputBuilder()
-.setCustomId("codigo")
-.setLabel("Código da Sala")
-.setStyle(TextInputStyle.Short)
-),
-new ActionRowBuilder().addComponents(
-new TextInputBuilder()
-.setCustomId("senha")
-.setLabel("Senha da Sala")
-.setStyle(TextInputStyle.Short)
-)
-);
-
-return interaction.showModal(modal);
-}
-
-/************** ENCERRAR NORMAL **************/
-if (interaction.customId === "encerrar_chat") {
-
-const mediador = partidasAtivas[interaction.channel.id];
-if (interaction.user.id !== mediador)
-return interaction.reply({ content: "Apenas o mediador pode encerrar.", ephemeral: true });
-
-delete partidasAtivas[interaction.channel.id];
 return interaction.channel.delete();
 }
 
@@ -346,41 +253,20 @@ console.log(err);
 }
 });
 
-/****************************************************************/
-/*********************** MENSAGEM NORMAL ************************/
-/****************************************************************/
+/**************** FUNÇÕES ****************/
 
-client.on("messageCreate", async (message) => {
+async function atualizarMensagemFila(message, fila) {
 
-if (message.author.bot) return;
+const embed = new EmbedBuilder()
+.setTitle(`Fila ${fila.modo}`)
+.setDescription(`Tipo: ${fila.tipo}
+Valor: R$ ${fila.preco}
 
-const dados = filasTemp[message.author.id];
-if (!dados) return;
+Jogadores (${fila.jogadores.length}/${MODOS[fila.modo]})
+${fila.jogadores.map(id => `<@${id}>`).join("\n") || "Vazio"}`);
 
-const valores = message.content.split(",").map(v => v.trim());
-delete filasTemp[message.author.id];
-
-for (const valor of valores) {
-
-const key = `${dados.modo}_${dados.tipo}_${valor}`;
-
-filas[key] = {
-modo: dados.modo,
-tipo: dados.tipo,
-preco: valor,
-jogadores: [],
-mediador: message.author.id
-};
-
-await criarMensagemFila(message.channel, key);
+await message.edit({ embeds: [embed], components: message.components });
 }
-
-await message.delete().catch(() => {});
-});
-
-/****************************************************************/
-/*********************** FUNÇÕES ********************************/
-/****************************************************************/
 
 function gerarMensagemTreino(fila) {
 const lista = fila.jogadores
@@ -419,34 +305,9 @@ const encerrar = new ButtonBuilder()
 .setStyle(ButtonStyle.Danger);
 
 await canal.send({
-content: "🎮 Treino iniciado!\n\nBom treino 💪",
+content: "Por favor encerrando o treino aperte em **Encerrar Treino**.\n\nBom treino!",
 components: [new ActionRowBuilder().addComponents(encerrar)]
 });
-}
-
-async function criarMensagemFila(channel, key) {
-
-const fila = filas[key];
-
-const embed = new EmbedBuilder()
-.setTitle(`Fila ${fila.modo}`)
-.setDescription(`Tipo: ${fila.tipo}
-Valor: R$ ${fila.preco}
-
-Jogadores (0/${MODOS[fila.modo]})`);
-
-const row = new ActionRowBuilder().addComponents(
-new ButtonBuilder()
-.setCustomId(`entrar_${key}`)
-.setLabel("Entrar")
-.setStyle(ButtonStyle.Success),
-new ButtonBuilder()
-.setCustomId(`sair_${key}`)
-.setLabel("Sair")
-.setStyle(ButtonStyle.Secondary)
-);
-
-await channel.send({ embeds: [embed], components: [row] });
 }
 
 client.login(TOKEN);
