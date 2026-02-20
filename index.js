@@ -156,110 +156,23 @@ client.on("interactionCreate", async (interaction) => {
 
       fila.jogadores.push(interaction.user.id);
 
-      const max = modos[fila.modo];
+      atualizarMensagemFila(interaction, fila, key);
+    }
 
-      const embed = new EmbedBuilder()
-        .setTitle(`Fila ${fila.modo}`)
-        .setDescription(
-`Tipo: ${fila.tipo}
-Valor: R$ ${fila.preco}
+    /***********************
+     * BOTÃO SAIR
+     ***********************/
+    if (interaction.isButton() && interaction.customId.startsWith("sair_")) {
 
-Jogadores (${fila.jogadores.length}/${max})
-${fila.jogadores.map(id => `<@${id}>`).join("\n")}`
-        );
+      await interaction.deferUpdate();
 
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`entrar_${key}`)
-          .setLabel("Entrar")
-          .setStyle(ButtonStyle.Success),
-        new ButtonBuilder()
-          .setCustomId(`sair_${key}`)
-          .setLabel("Sair")
-          .setStyle(ButtonStyle.Secondary)
-      );
+      const key = interaction.customId.replace("sair_", "");
+      const fila = filas[key];
+      if (!fila) return;
 
-      await interaction.message.edit({ embeds: [embed], components: [row] });
+      fila.jogadores = fila.jogadores.filter(id => id !== interaction.user.id);
 
-      if (fila.jogadores.length >= max) {
-
-        const guild = interaction.guild;
-
-        const categoria = guild.channels.cache.find(c =>
-          c.name.toLowerCase() === "rush" &&
-          c.type === ChannelType.GuildCategory
-        );
-
-        const mediador = guild.roles.cache.find(r =>
-          r.name.toLowerCase() === "mediador"
-        );
-
-        const canal = await guild.channels.create({
-          name: `partida-${fila.modo}-${fila.preco}`,
-          type: ChannelType.GuildText,
-          parent: categoria ? categoria.id : null,
-          permissionOverwrites: [
-            {
-              id: guild.roles.everyone.id,
-              deny: [PermissionFlagsBits.ViewChannel]
-            },
-            ...fila.jogadores.map(id => ({
-              id,
-              allow: [
-                PermissionFlagsBits.ViewChannel,
-                PermissionFlagsBits.SendMessages
-              ]
-            })),
-            {
-              id: mediador.id,
-              allow: [
-                PermissionFlagsBits.ViewChannel,
-                PermissionFlagsBits.SendMessages
-              ]
-            }
-          ]
-        });
-
-        await canal.send(
-`🎮 Partida criada!
-⚔ ${fila.modo}
-📌 Tipo: ${fila.tipo}
-💰 Valor: R$ ${fila.preco}
-
-👥 Jogadores:
-${fila.jogadores.map(id => `<@${id}>`).join("\n")}`
-        );
-
-        const painelRow = new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId(`confirmar_${fila.preco}`)
-            .setLabel("Confirmar")
-            .setStyle(ButtonStyle.Success),
-          new ButtonBuilder()
-            .setCustomId("encerrar_partida")
-            .setLabel("Encerrar Chat")
-            .setStyle(ButtonStyle.Danger)
-        );
-
-        await canal.send({
-          content: `<@&${mediador.id}> Painel do Mediador`,
-          components: [painelRow],
-          allowedMentions: { roles: [mediador.id] }
-        });
-
-        fila.jogadores = [];
-
-        const novoEmbed = new EmbedBuilder()
-          .setTitle(`Fila ${fila.modo}`)
-          .setDescription(
-`Tipo: ${fila.tipo}
-Valor: R$ ${fila.preco}
-
-Jogadores (0/${max})`
-          );
-
-        await interaction.message.edit({ embeds: [novoEmbed], components: [row] });
-      }
+      atualizarMensagemFila(interaction, fila, key);
     }
 
     /***********************
@@ -306,4 +219,126 @@ Valor: R$ ${valor}`
   }
 });
 
+/***********************
+ * FUNÇÃO ATUALIZAR FILA
+ ***********************/
+async function atualizarMensagemFila(interaction, fila, key) {
+
+  const max = modos[fila.modo];
+
+  const embed = new EmbedBuilder()
+    .setTitle(`Fila ${fila.modo}`)
+    .setDescription(
+`Tipo: ${fila.tipo}
+Valor: R$ ${fila.preco}
+
+Jogadores (${fila.jogadores.length}/${max})
+${fila.jogadores.map(id => `<@${id}>`).join("\n") || "Nenhum jogador"}`
+    );
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`entrar_${key}`)
+      .setLabel("Entrar")
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId(`sair_${key}`)
+      .setLabel("Sair")
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  await interaction.message.edit({ embeds: [embed], components: [row] });
+
+  if (fila.jogadores.length >= max) {
+
+    const guild = interaction.guild;
+
+    const categoria = guild.channels.cache.find(c =>
+      c.name.toLowerCase() === "rush" &&
+      c.type === ChannelType.GuildCategory
+    );
+
+    const mediador = guild.roles.cache.find(r =>
+      r.name.toLowerCase() === "mediador"
+    );
+
+    const canal = await guild.channels.create({
+      name: `partida-${fila.modo}-${fila.preco}`,
+      type: ChannelType.GuildText,
+      parent: categoria ? categoria.id : null,
+      permissionOverwrites: [
+        {
+          id: guild.roles.everyone.id,
+          deny: [PermissionFlagsBits.ViewChannel]
+        },
+        ...fila.jogadores.map(id => ({
+          id,
+          allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages]
+        })),
+        {
+          id: mediador.id,
+          allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages]
+        }
+      ]
+    });
+
+    await canal.send(`🎮 Partida criada!\n👥 ${fila.jogadores.map(id => `<@${id}>`).join("\n")}`);
+
+    fila.jogadores = [];
+  }
+}
+
+/***********************
+ * MESSAGE CREATE
+ ***********************/
+client.on("messageCreate", async (message) => {
+
+  if (message.author.bot) return;
+
+  const dados = filasTemp[message.author.id];
+  if (!dados) return;
+
+  const valores = message.content.split(",").map(v => v.trim());
+  delete filasTemp[message.author.id];
+
+  for (const valor of valores) {
+
+    const key = `${dados.modo}_${dados.tipo}_${valor}`;
+
+    filas[key] = {
+      modo: dados.modo,
+      tipo: dados.tipo,
+      preco: valor,
+      jogadores: []
+    };
+
+    const embed = new EmbedBuilder()
+      .setTitle(`Fila ${dados.modo}`)
+      .setDescription(
+`Tipo: ${dados.tipo}
+Valor: R$ ${valor}
+
+Jogadores (0/${modos[dados.modo]})`
+      );
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`entrar_${key}`)
+        .setLabel("Entrar")
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId(`sair_${key}`)
+        .setLabel("Sair")
+        .setStyle(ButtonStyle.Secondary)
+    );
+
+    await message.channel.send({ embeds: [embed], components: [row] });
+  }
+
+  await message.delete();
+});
+
+/***********************
+ * LOGIN
+ ***********************/
 client.login(TOKEN);
