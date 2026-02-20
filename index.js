@@ -22,7 +22,8 @@ const client = new Client({
 intents: [
 GatewayIntentBits.Guilds,
 GatewayIntentBits.GuildMessages,
-GatewayIntentBits.GuildMembers
+GatewayIntentBits.GuildMembers,
+GatewayIntentBits.MessageContent
 ]
 });
 
@@ -91,7 +92,6 @@ if (interaction.commandName === "fila-treino") {
 
 const modo = new StringSelectMenuBuilder()
 .setCustomId("modo_treino")
-.setPlaceholder("Modo")
 .addOptions(
 { label: "1x1", value: "1x1" },
 { label: "2x2", value: "2x2" },
@@ -101,7 +101,6 @@ const modo = new StringSelectMenuBuilder()
 
 const tipo = new StringSelectMenuBuilder()
 .setCustomId("tipo_treino")
-.setPlaceholder("Tipo")
 .addOptions(
 { label: "Mobile", value: "Mobile" },
 { label: "Emu", value: "Emu" },
@@ -136,7 +135,6 @@ configTemp.set(interaction.user.id, { modo: interaction.values[0] });
 
 const tipo = new StringSelectMenuBuilder()
 .setCustomId("normal_tipo")
-.setPlaceholder("Escolha o tipo")
 .addOptions(
 { label: "Mobile", value: "Mobile" },
 { label: "Emu", value: "Emu" },
@@ -154,39 +152,40 @@ components: [new ActionRowBuilder().addComponents(tipo)]
 /* TIPO NORMAL */
 if (interaction.customId === "normal_tipo") {
 
-configTemp.get(interaction.user.id).tipo = interaction.values[0];
+const data = configTemp.get(interaction.user.id);
+data.tipo = interaction.values[0];
+data.aguardandoValor = true;
 
-const valor = new StringSelectMenuBuilder()
-.setCustomId("normal_valor")
-.setPlaceholder("Escolha o valor")
-.addOptions(
-{ label: "0.70", value: "0.70" },
-{ label: "1.00", value: "1.00" },
-{ label: "2.00", value: "2.00" },
-{ label: "5.00", value: "5.00" }
-);
+await interaction.update({
+content: `Modo: ${data.modo}
+Tipo: ${data.tipo}
 
-return await interaction.update({
-content: `Modo: ${configTemp.get(interaction.user.id).modo}
-Tipo: ${interaction.values[0]}
-
-Escolha o valor:`,
-components: [new ActionRowBuilder().addComponents(valor)]
+💬 Digite o valor da fila agora (ex: 0.70)`,
+components: []
 });
 }
+}
 
-/* VALOR NORMAL */
-if (interaction.customId === "normal_valor") {
+/**************** CAPTURA VALOR DIGITADO ****************/
 
-const data = configTemp.get(interaction.user.id);
-data.valor = interaction.values[0];
+client.on("messageCreate", async (message) => {
+if (message.author.bot) return;
+
+const data = configTemp.get(message.author.id);
+if (!data || !data.aguardandoValor) return;
+
+const valor = message.content.replace(",", ".");
+if (isNaN(valor)) return message.reply("Digite apenas números.");
+
+data.valor = valor;
+data.aguardandoValor = false;
 
 const id = Date.now().toString();
 
 filasNormal.set(id, {
 modo: data.modo,
 tipo: data.tipo,
-valor: data.valor,
+valor: valor,
 jogadores: [],
 max: MODOS[data.modo]
 });
@@ -201,40 +200,20 @@ const sair = new ButtonBuilder()
 .setLabel("Sair")
 .setStyle(ButtonStyle.Danger);
 
-await interaction.channel.send({
+await message.channel.send({
 content: gerarMensagemNormal(filasNormal.get(id)),
 components: [new ActionRowBuilder().addComponents(entrar, sair)]
 });
 
-return await interaction.update({
-content: "Fila criada com sucesso ✅",
-components: []
+message.reply("Fila criada com sucesso ✅");
 });
-}
 
-/* TREINO CONFIG */
-if (!configTemp.has(interaction.user.id))
-configTemp.set(interaction.user.id, {});
+/**************** BOTÕES ****************/
 
-const data = configTemp.get(interaction.user.id);
+client.on("interactionCreate", async (interaction) => {
+if (!interaction.isButton()) return;
 
-if (interaction.customId === "modo_treino")
-data.modo = interaction.values[0];
-
-if (interaction.customId === "tipo_treino")
-data.tipo = interaction.values[0];
-
-configTemp.set(interaction.user.id, data);
-
-return await interaction.deferUpdate();
-}
-
-/* BOTÕES */
-if (interaction.isButton()) {
-
-/* ENTRAR NORMAL */
 if (interaction.customId.startsWith("entrar_normal_")) {
-
 await interaction.deferUpdate();
 
 const id = interaction.customId.split("_")[2];
@@ -250,9 +229,7 @@ components: interaction.message.components
 });
 }
 
-/* SAIR NORMAL */
 if (interaction.customId.startsWith("sair_normal_")) {
-
 await interaction.deferUpdate();
 
 const id = interaction.customId.split("_")[2];
@@ -265,169 +242,19 @@ await interaction.message.edit({
 content: gerarMensagemNormal(fila),
 components: interaction.message.components
 });
-}
-
-/* CRIAR TREINO */
-if (interaction.customId === "criar_treino") {
-
-const data = configTemp.get(interaction.user.id);
-if (!data?.modo || !data?.tipo)
-return interaction.reply({ content: "Selecione modo e tipo.", ephemeral: true });
-
-const id = Date.now().toString();
-
-filasTreino.set(id, {
-modo: data.modo,
-tipo: data.tipo,
-jogadores: [],
-max: MODOS[data.modo]
-});
-
-const entrar = new ButtonBuilder()
-.setCustomId(`entrar_treino_${id}`)
-.setLabel("Entrar")
-.setStyle(ButtonStyle.Primary);
-
-const sair = new ButtonBuilder()
-.setCustomId(`sair_treino_${id}`)
-.setLabel("Sair")
-.setStyle(ButtonStyle.Danger);
-
-await interaction.channel.send({
-content: gerarMensagemTreino(filasTreino.get(id)),
-components: [new ActionRowBuilder().addComponents(entrar, sair)]
-});
-
-return interaction.reply({ content: "Fila treino criada ✅", ephemeral: true });
-}
-
-/* ENTRAR TREINO */
-if (interaction.customId.startsWith("entrar_treino_")) {
-
-await interaction.deferUpdate();
-
-const id = interaction.customId.split("_")[2];
-const fila = filasTreino.get(id);
-if (!fila) return;
-
-if (!fila.jogadores.includes(interaction.user.id) && fila.jogadores.length < fila.max)
-fila.jogadores.push(interaction.user.id);
-
-await interaction.message.edit({
-content: gerarMensagemTreino(fila),
-components: interaction.message.components
-});
-
-if (fila.jogadores.length === fila.max) {
-await criarCanal(interaction.guild, fila);
-fila.jogadores = [];
-await interaction.message.edit({
-content: gerarMensagemTreino(fila),
-components: interaction.message.components
-});
-}
-}
-
-/* SAIR TREINO */
-if (interaction.customId.startsWith("sair_treino_")) {
-
-await interaction.deferUpdate();
-
-const id = interaction.customId.split("_")[2];
-const fila = filasTreino.get(id);
-if (!fila) return;
-
-fila.jogadores = fila.jogadores.filter(x => x !== interaction.user.id);
-
-await interaction.message.edit({
-content: gerarMensagemTreino(fila),
-components: interaction.message.components
-});
-}
-
-/* ENCERRAR TREINO */
-if (interaction.customId.startsWith("encerrar_")) {
-if (!interaction.member.permissions.has(PermissionFlagsBits.ManageChannels))
-return interaction.reply({ content: "Apenas staff pode encerrar.", ephemeral: true });
-
-await interaction.deferUpdate();
-return interaction.channel.delete();
-}
-}
-
-} catch (err) {
-console.log("ERRO:", err);
 }
 });
 
 /**************** FUNÇÕES ****************/
 
 function gerarMensagemNormal(fila) {
-const lista = fila.jogadores
-.map((id, i) => `${i + 1}. <@${id}>`)
-.join("\n");
+const lista = fila.jogadores.map((id,i)=>`${i+1}. <@${id}>`).join("\n");
 
 return `💰 Fila ${fila.modo} | ${fila.tipo}
 Valor: R$ ${fila.valor}
 
 ${lista || "Vazio"}
 Vagas: ${fila.jogadores.length}/${fila.max}`;
-}
-
-function gerarMensagemTreino(fila) {
-const lista = fila.jogadores
-.map((id, i) => `${i + 1}. <@${id}>`)
-.join("\n");
-
-return `🔥 Fila Treino ${fila.modo} | ${fila.tipo}
-
-${lista || "Vazio"}
-Vagas: ${fila.jogadores.length}/${fila.max}`;
-}
-
-async function criarCanal(guild, fila) {
-
-const categoria = guild.channels.cache.find(
-c => c.name.toLowerCase() === "rush treino" && c.type === ChannelType.GuildCategory
-);
-
-if (!categoria) return;
-
-const canal = await guild.channels.create({
-name: `treino-${fila.modo}-${fila.tipo}`.toLowerCase().replace(/ /g, "-"),
-type: ChannelType.GuildText,
-parent: categoria.id,
-permissionOverwrites: [
-{ id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
-{
-id: guild.members.me.id,
-allow: [
-PermissionFlagsBits.ViewChannel,
-PermissionFlagsBits.SendMessages,
-PermissionFlagsBits.ManageChannels
-]
-},
-...fila.jogadores.map(id => ({
-id,
-allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages]
-}))
-]
-});
-
-const btn = new ButtonBuilder()
-.setCustomId(`encerrar_${canal.id}`)
-.setLabel("Encerrar Treino")
-.setStyle(ButtonStyle.Danger);
-
-await canal.send({
-content: `🔥 Treino iniciado!
-
-Modo: ${fila.modo}
-Tipo: ${fila.tipo}
-
-Ao finalizar clique em **Encerrar Treino**.`,
-components: [new ActionRowBuilder().addComponents(btn)]
-});
 }
 
 client.login(TOKEN);
