@@ -141,7 +141,9 @@ client.on("interactionCreate", async (interaction) => {
       }
     }
 
-    /* BOTÃO ENTRAR */
+    /***********************
+     * BOTÃO ENTRAR
+     ***********************/
     if (interaction.isButton() && interaction.customId.startsWith("entrar_")) {
 
       await interaction.deferUpdate();
@@ -166,7 +168,18 @@ Jogadores (${fila.jogadores.length}/${max})
 ${fila.jogadores.map(id => `<@${id}>`).join("\n")}`
         );
 
-      await interaction.message.edit({ embeds: [embed] });
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`entrar_${key}`)
+          .setLabel("Entrar")
+          .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+          .setCustomId(`sair_${key}`)
+          .setLabel("Sair")
+          .setStyle(ButtonStyle.Secondary)
+      );
+
+      await interaction.message.edit({ embeds: [embed], components: [row] });
 
       /* SE LOTAR */
       if (fila.jogadores.length >= max) {
@@ -174,7 +187,8 @@ ${fila.jogadores.map(id => `<@${id}>`).join("\n")}`
         const guild = interaction.guild;
 
         const categoria = guild.channels.cache.find(c =>
-          c.name === "rush" && c.type === ChannelType.GuildCategory
+          c.name.toLowerCase() === "rush" &&
+          c.type === ChannelType.GuildCategory
         );
 
         const mediador = guild.roles.cache.find(r =>
@@ -217,8 +231,7 @@ ${fila.jogadores.map(id => `<@${id}>`).join("\n")}`
 ${fila.jogadores.map(id => `<@${id}>`).join("\n")}`
         );
 
-        /* PAINEL APENAS MEDIADOR */
-        const row = new ActionRowBuilder().addComponents(
+        const painelRow = new ActionRowBuilder().addComponents(
           new ButtonBuilder()
             .setCustomId(`confirmar_${fila.preco}`)
             .setLabel("Confirmar")
@@ -231,11 +244,10 @@ ${fila.jogadores.map(id => `<@${id}>`).join("\n")}`
 
         await canal.send({
           content: `<@&${mediador.id}> Painel do Mediador`,
-          components: [row],
+          components: [painelRow],
           allowedMentions: { roles: [mediador.id] }
         });
 
-        /* CRIA NOVA FILA AUTOMÁTICA */
         fila.jogadores = [];
 
         const novoEmbed = new EmbedBuilder()
@@ -247,11 +259,41 @@ Valor: R$ ${fila.preco}
 Jogadores (0/${max})`
           );
 
-        await interaction.message.edit({ embeds: [novoEmbed] });
+        await interaction.message.edit({ embeds: [novoEmbed], components: [row] });
       }
     }
 
-    /* CONFIRMAR */
+    /***********************
+     * BOTÃO SAIR
+     ***********************/
+    if (interaction.isButton() && interaction.customId.startsWith("sair_")) {
+
+      await interaction.deferUpdate();
+
+      const key = interaction.customId.replace("sair_", "");
+      const fila = filas[key];
+      if (!fila) return;
+
+      fila.jogadores = fila.jogadores.filter(id => id !== interaction.user.id);
+
+      const max = modos[fila.modo];
+
+      const embed = new EmbedBuilder()
+        .setTitle(`Fila ${fila.modo}`)
+        .setDescription(
+`Tipo: ${fila.tipo}
+Valor: R$ ${fila.preco}
+
+Jogadores (${fila.jogadores.length}/${max})
+${fila.jogadores.map(id => `<@${id}>`).join("\n") || "Nenhum jogador"}`
+        );
+
+      await interaction.message.edit({ embeds: [embed] });
+    }
+
+    /***********************
+     * CONFIRMAR
+     ***********************/
     if (interaction.isButton() && interaction.customId.startsWith("confirmar_")) {
 
       if (!interaction.member.roles.cache.some(r =>
@@ -270,7 +312,9 @@ Valor: R$ ${valor}`
       );
     }
 
-    /* ENCERRAR */
+    /***********************
+     * ENCERRAR
+     ***********************/
     if (interaction.isButton() && interaction.customId === "encerrar_partida") {
 
       if (!interaction.member.roles.cache.some(r =>
@@ -328,7 +372,11 @@ Jogadores (0/${modos[dados.modo]})`
       new ButtonBuilder()
         .setCustomId(`entrar_${key}`)
         .setLabel("Entrar")
-        .setStyle(ButtonStyle.Success)
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId(`sair_${key}`)
+        .setLabel("Sair")
+        .setStyle(ButtonStyle.Secondary)
     );
 
     await message.channel.send({ embeds: [embed], components: [row] });
