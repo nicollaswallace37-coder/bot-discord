@@ -1,16 +1,10 @@
 require("dotenv").config();
 
-/***********************
- * EXPRESS
- ***********************/
 const express = require("express");
 const app = express();
 app.get("/", (req, res) => res.send("Bot online ✅"));
 app.listen(process.env.PORT || 3000);
 
-/***********************
- * DISCORD
- ***********************/
 const {
   Client,
   GatewayIntentBits,
@@ -42,13 +36,27 @@ const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 const PIX = "450.553.628.98";
 
-/***********************
- * SLASH
- ***********************/
+const modos = {
+  "1x1": 2,
+  "2x2": 4,
+  "3x3": 6,
+  "4x4": 8
+};
+
+const filas = {};
+const filasTemp = {};
+
+function calcularTaxa(valor) {
+  const numero = parseFloat(valor);
+  if (numero <= 0.70) return numero + 0.20;
+  return numero + numero * 0.20;
+}
+
+/**************** SLASH ****************/
 const commands = [
   new SlashCommandBuilder()
     .setName("painel")
-    .setDescription("Abrir painel de criação")
+    .setDescription("Abrir painel")
     .toJSON()
 ];
 
@@ -60,40 +68,15 @@ const rest = new REST({ version: "10" }).setToken(TOKEN);
   );
 })();
 
-/***********************
- * CONFIG
- ***********************/
-const modos = {
-  "1x1": 2,
-  "2x2": 4,
-  "3x3": 6,
-  "4x4": 8
-};
-
-const filas = {};
-const filasTemp = {};
-
-/***********************
- * TAXA
- ***********************/
-function calcularTaxa(valor) {
-  const numero = parseFloat(valor);
-  if (numero <= 0.70) return numero + 0.20;
-  return numero + numero * 0.20;
-}
-
+/**************** READY ****************/
 client.once("ready", () => {
-  console.log(`Logado como ${client.user.tag}`);
+  console.log("Bot online!");
 });
 
-/***********************
- * INTERAÇÕES
- ***********************/
+/**************** INTERAÇÕES ****************/
 client.on("interactionCreate", async (interaction) => {
-
   try {
 
-    /******** SLASH ********/
     if (interaction.isChatInputCommand()) {
 
       if (interaction.commandName === "painel") {
@@ -118,7 +101,6 @@ client.on("interactionCreate", async (interaction) => {
       }
     }
 
-    /******** SELECT ********/
     if (interaction.isStringSelectMenu()) {
 
       if (interaction.customId === "modo_select") {
@@ -158,20 +140,42 @@ client.on("interactionCreate", async (interaction) => {
       }
     }
 
-    /******** BOTÕES DO CHAT ********/
     if (interaction.isButton()) {
 
-      if (interaction.customId === "confirmar_pagamento") {
+      const id = interaction.customId;
 
-        const fila = Object.values(filas).find(f =>
-          f.jogadores.includes(interaction.user.id)
-        );
+      if (id.startsWith("entrar_") || id.startsWith("sair_")) {
 
-        if (!fila || fila.mediador !== interaction.user.id)
-          return interaction.reply({
-            content: "Apenas o mediador pode usar isso.",
-            ephemeral: true
-          });
+        await interaction.deferUpdate();
+
+        const key = id.split("_").slice(1).join("_");
+        const fila = filas[key];
+        if (!fila) return;
+
+        if (id.startsWith("entrar_")) {
+          if (!fila.jogadores.includes(interaction.user.id))
+            fila.jogadores.push(interaction.user.id);
+        }
+
+        if (id.startsWith("sair_")) {
+          fila.jogadores = fila.jogadores.filter(id => id !== interaction.user.id);
+        }
+
+        if (fila.jogadores.length === modos[fila.modo]) {
+
+          await criarChatPrivado(interaction.guild, fila);
+
+          fila.jogadores = [];
+        }
+
+        await atualizarFila(interaction.message, key);
+      }
+
+      if (id === "confirmar_pagamento") {
+
+        const fila = Object.values(filas).find(f => f.mediador === interaction.user.id);
+        if (!fila)
+          return interaction.reply({ content: "Só o mediador pode usar.", ephemeral: true });
 
         const modal = new ModalBuilder()
           .setCustomId("modal_sala")
@@ -195,24 +199,19 @@ client.on("interactionCreate", async (interaction) => {
         return interaction.showModal(modal);
       }
 
-      if (interaction.customId === "encerrar_chat") {
-        return interaction.channel.delete().catch(() => {});
+      if (id === "encerrar_chat") {
+        return interaction.channel.delete();
       }
     }
 
-    /******** MODAL ********/
     if (interaction.isModalSubmit()) {
 
-      if (interaction.customId === "modal_sala") {
+      const codigo = interaction.fields.getTextInputValue("codigo");
+      const senha = interaction.fields.getTextInputValue("senha");
 
-        const codigo = interaction.fields.getTextInputValue("codigo");
-        const senha = interaction.fields.getTextInputValue("senha");
-
-        await interaction.reply({
-          content: `🎮 **Sala criada!**\nCódigo: ${codigo}\nSenha: ${senha}`,
-          ephemeral: false
-        });
-      }
+      await interaction.reply({
+        content: `🎮 Sala criada!\nCódigo: ${codigo}\nSenha: ${senha}`
+      });
     }
 
   } catch (err) {
@@ -220,9 +219,7 @@ client.on("interactionCreate", async (interaction) => {
   }
 });
 
-/***********************
- * RECEBER VALORES
- ***********************/
+/**************** RECEBER VALORES ****************/
 client.on("messageCreate", async (message) => {
 
   if (message.author.bot) return;
@@ -245,10 +242,101 @@ client.on("messageCreate", async (message) => {
       mediador: message.author.id
     };
 
-    await message.channel.send(`Fila criada por <@${message.author.id}>`);
+    await criarMensagemFila(message.channel, key);
   }
 
   await message.delete().catch(() => {});
 });
+
+/**************** FILA ****************/
+async function criarMensagemFila(channel, key) {
+
+  const fila = filas[key];
+
+  const embed = new EmbedBuilder()
+    .setTitle(`Fila ${fila.modo}`)
+    .setDescription(
+`Tipo: ${fila.tipo}
+Valor: R$ ${fila.preco}
+
+Jogadores (0/${modos[fila.modo]})`
+    );
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`entrar_${key}`)
+      .setLabel("Entrar")
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId(`sair_${key}`)
+      .setLabel("Sair")
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  await channel.send({ embeds: [embed], components: [row] });
+}
+
+async function atualizarFila(message, key) {
+
+  const fila = filas[key];
+
+  const embed = new EmbedBuilder()
+    .setTitle(`Fila ${fila.modo}`)
+    .setDescription(
+`Tipo: ${fila.tipo}
+Valor: R$ ${fila.preco}
+
+Jogadores (${fila.jogadores.length}/${modos[fila.modo]})
+${fila.jogadores.map(id => `<@${id}>`).join("\n") || "Nenhum jogador"}`
+    );
+
+  await message.edit({ embeds: [embed] });
+}
+
+/**************** CHAT ****************/
+async function criarChatPrivado(guild, fila) {
+
+  const categoria = guild.channels.cache.find(c =>
+    c.name.toLowerCase() === "rush" &&
+    c.type === ChannelType.GuildCategory
+  );
+
+  const valorFinal = calcularTaxa(fila.preco).toFixed(2);
+
+  const canal = await guild.channels.create({
+    name: `${fila.tipo}-${fila.modo}`,
+    type: ChannelType.GuildText,
+    parent: categoria ? categoria.id : null,
+    permissionOverwrites: [
+      { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
+      ...fila.jogadores.map(id => ({
+        id,
+        allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages]
+      }))
+    ]
+  });
+
+  const embed = new EmbedBuilder()
+    .setTitle("Pagamento da Partida")
+    .setDescription(
+`Valor final: R$ ${valorFinal}
+
+Pix:
+${PIX}`
+    );
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("confirmar_pagamento")
+      .setLabel("Confirmar")
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId("encerrar_chat")
+      .setLabel("Encerrar")
+      .setStyle(ButtonStyle.Danger)
+  );
+
+  await canal.send({ embeds: [embed], components: [row] });
+}
 
 client.login(TOKEN);
