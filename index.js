@@ -45,6 +45,7 @@ const modos = {
 
 const filas = {};
 const filasTemp = {};
+const partidasAtivas = {}; // salva mediador por canal
 
 function calcularTaxa(valor) {
   const numero = parseFloat(valor);
@@ -78,7 +79,6 @@ client.on("interactionCreate", async (interaction) => {
   try {
 
     if (interaction.isChatInputCommand()) {
-
       if (interaction.commandName === "painel") {
 
         const row = new ActionRowBuilder().addComponents(
@@ -144,6 +144,7 @@ client.on("interactionCreate", async (interaction) => {
 
       const id = interaction.customId;
 
+      /* ENTRAR / SAIR */
       if (id.startsWith("entrar_") || id.startsWith("sair_")) {
 
         await interaction.deferUpdate();
@@ -163,7 +164,9 @@ client.on("interactionCreate", async (interaction) => {
 
         if (fila.jogadores.length === modos[fila.modo]) {
 
-          await criarChatPrivado(interaction.guild, fila);
+          const canalCriado = await criarChatPrivado(interaction.guild, fila);
+
+          partidasAtivas[canalCriado.id] = fila.mediador;
 
           fila.jogadores = [];
         }
@@ -171,11 +174,16 @@ client.on("interactionCreate", async (interaction) => {
         await atualizarFila(interaction.message, key);
       }
 
+      /* CONFIRMAR */
       if (id === "confirmar_pagamento") {
 
-        const fila = Object.values(filas).find(f => f.mediador === interaction.user.id);
-        if (!fila)
-          return interaction.reply({ content: "Só o mediador pode usar.", ephemeral: true });
+        const mediador = partidasAtivas[interaction.channel.id];
+
+        if (interaction.user.id !== mediador)
+          return interaction.reply({
+            content: "Apenas o mediador pode usar.",
+            ephemeral: true
+          });
 
         const modal = new ModalBuilder()
           .setCustomId("modal_sala")
@@ -199,7 +207,18 @@ client.on("interactionCreate", async (interaction) => {
         return interaction.showModal(modal);
       }
 
+      /* ENCERRAR */
       if (id === "encerrar_chat") {
+
+        const mediador = partidasAtivas[interaction.channel.id];
+
+        if (interaction.user.id !== mediador)
+          return interaction.reply({
+            content: "Apenas o mediador pode encerrar.",
+            ephemeral: true
+          });
+
+        delete partidasAtivas[interaction.channel.id];
         return interaction.channel.delete();
       }
     }
@@ -337,6 +356,8 @@ ${PIX}`
   );
 
   await canal.send({ embeds: [embed], components: [row] });
+
+  return canal;
 }
 
 client.login(TOKEN);
