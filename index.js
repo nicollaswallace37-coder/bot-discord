@@ -146,7 +146,7 @@ Jogadores (0/${modos[modo]})`
     return interaction.reply({ embeds: [embed], components: [row] });
   }
 
-  /* ================= ENTRAR ================= */
+  /* ================= BOTÃO ENTRAR ================= */
 
   if (interaction.isButton() && interaction.customId.startsWith("entrar_")) {
 
@@ -174,7 +174,7 @@ ${fila.jogadores.map(id => `<@${id}>`).join("\n")}`
 
     if (fila.jogadores.length < max) return;
 
-    /* ================= NOVA FILA AUTOMÁTICA ================= */
+    /* ===== RESETAR FILA AUTOMATICAMENTE ===== */
 
     const novaEmbed = EmbedBuilder.from(embed)
       .setDescription(
@@ -187,7 +187,7 @@ Jogadores (0/${max})`
 
     await interaction.message.edit({ embeds: [novaEmbed] });
 
-    /* ================= CRIAR CATEGORIA ================= */
+    /* ===== CRIAR CATEGORIA SE NÃO EXISTIR ===== */
 
     const nomeCategoria = fila.treino ? "rush treino" : "rush";
 
@@ -203,19 +203,30 @@ Jogadores (0/${max})`
       });
     }
 
-    /* ================= CANAL PRIVADO ================= */
+    /* ===== CANAL PRIVADO APENAS JOGADORES ===== */
+
+    const permissionOverwrites = [
+      {
+        id: interaction.guild.roles.everyone,
+        deny: [PermissionsBitField.Flags.ViewChannel]
+      }
+    ];
+
+    fila.jogadores.forEach(id => {
+      permissionOverwrites.push({
+        id,
+        allow: [
+          PermissionsBitField.Flags.ViewChannel,
+          PermissionsBitField.Flags.SendMessages
+        ]
+      });
+    });
 
     const canal = await interaction.guild.channels.create({
       name: `partida-${fila.modo}`,
       type: ChannelType.GuildText,
       parent: categoria.id,
-      permissionOverwrites: [
-        {
-          id: interaction.guild.roles.everyone,
-          deny: [PermissionsBitField.Flags.ViewChannel]
-        },
-        ...interaction.message.embeds[0].description
-      ]
+      permissionOverwrites
     });
 
     const encerrarRow = new ActionRowBuilder().addComponents(
@@ -226,7 +237,8 @@ Jogadores (0/${max})`
     );
 
     await canal.send({
-      content: "🔥 Treino iniciado!\n\nPor favor, terminando o treino clique no botão **Encerrar Treino**.\nBom treino 💪",
+      content:
+        "🔥 Treino iniciado!\n\nPor favor, terminando o treino clique no botão **Encerrar Treino**.\nBom treino 💪",
       components: fila.treino ? [encerrarRow] : []
     });
   }
