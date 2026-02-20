@@ -31,9 +31,6 @@ const precos = {
   "2x2": 20
 };
 
-const CATEGORIA_RUSH = "ID_CATEGORIA_RUSH";
-const CATEGORIA_TREINO = "ID_CATEGORIA_RUSH_TREINO";
-
 client.once("ready", () => {
   console.log("Bot online!");
 });
@@ -115,7 +112,6 @@ Jogadores (0/${modos[modo]})`
 
     const id = interaction.customId.replace("entrar_", "");
     const fila = filas[id];
-
     if (!fila) return;
 
     if (fila.jogadores.includes(interaction.user.id))
@@ -124,8 +120,6 @@ Jogadores (0/${modos[modo]})`
     fila.jogadores.push(interaction.user.id);
 
     const max = modos[fila.modo];
-
-    /* ===== ATUALIZA EMBED ===== */
 
     let embed;
 
@@ -154,14 +148,26 @@ ${fila.jogadores.map(id => `<@${id}>`).join("\n")}`
 
     if (fila.jogadores.length < max) return;
 
-    /* ===== CRIAR CANAL ===== */
+    /* ===== BUSCAR CATEGORIA PELO NOME ===== */
 
-    const categoria = fila.treino ? CATEGORIA_TREINO : CATEGORIA_RUSH;
+    const nomeCategoria = fila.treino ? "rush treino" : "rush";
+
+    const categoria = interaction.guild.channels.cache.find(
+      c =>
+        c.type === ChannelType.GuildCategory &&
+        c.name.toLowerCase() === nomeCategoria
+    );
+
+    if (!categoria)
+      return interaction.followUp({
+        content: `Categoria "${nomeCategoria}" não encontrada.`,
+        ephemeral: true
+      });
 
     const canal = await interaction.guild.channels.create({
       name: `partida-${fila.modo}`,
       type: ChannelType.GuildText,
-      parent: categoria,
+      parent: categoria.id,
       permissionOverwrites: [
         {
           id: interaction.guild.id,
@@ -173,8 +179,6 @@ ${fila.jogadores.map(id => `<@${id}>`).join("\n")}`
         }))
       ]
     });
-
-    /* ===== MENSAGEM NO CANAL ===== */
 
     if (fila.treino) {
 
@@ -208,14 +212,12 @@ ${fila.jogadores.map(id => `<@${id}>`).join("\n")}`
     delete filas[id];
   }
 
-  /* ================= BOTÃO CONFIRMAR (SÓ ADM) ================= */
+  /* ================= BOTÃO CONFIRMAR ================= */
 
   if (interaction.isButton() && interaction.customId.startsWith("confirmar_")) {
 
     if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator))
       return interaction.reply({ content: "Só ADM pode usar.", ephemeral: true });
-
-    const id = interaction.customId.replace("confirmar_", "");
 
     await interaction.reply({
       content: `Pix: 450.553.628.98`,
@@ -226,7 +228,6 @@ ${fila.jogadores.map(id => `<@${id}>`).join("\n")}`
   /* ================= BOTÃO ENCERRAR TREINO ================= */
 
   if (interaction.isButton() && interaction.customId.startsWith("encerrar_")) {
-
     await interaction.channel.delete();
   }
 
