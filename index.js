@@ -130,13 +130,13 @@ new ActionRowBuilder().addComponents(btn)
 
 if (interaction.isButton()) {
 
-/* 🔥 ENTRAR NORMAL CORRIGIDO */
+/* 🔥 ENTRAR NORMAL CORRIGIDO DEFINITIVO */
 if (interaction.customId.startsWith("entrar_normal_")) {
 
 const id = interaction.customId.replace("entrar_normal_", "");
 const fila = filasNormal.get(id);
 
-if (!fila) 
+if (!fila)
 return interaction.reply({ content: "Fila não encontrada.", ephemeral: true });
 
 if (fila.confirmado)
@@ -150,7 +150,12 @@ return interaction.reply({ content: "Fila cheia.", ephemeral: true });
 
 fila.jogadores.push(interaction.user.id);
 
-await interaction.update({
+/* CORREÇÃO DO ERRO 10062 */
+if (!interaction.deferred && !interaction.replied) {
+await interaction.deferUpdate();
+}
+
+await interaction.message.edit({
 content: gerarMensagemNormal(fila),
 components: interaction.message.components
 });
@@ -171,7 +176,11 @@ if (!fila) return interaction.deferUpdate();
 
 fila.jogadores = fila.jogadores.filter(x => x !== interaction.user.id);
 
-await interaction.update({
+if (!interaction.deferred && !interaction.replied) {
+await interaction.deferUpdate();
+}
+
+await interaction.message.edit({
 content: gerarMensagemNormal(fila),
 components: interaction.message.components
 });
