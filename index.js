@@ -73,6 +73,7 @@ if (interaction.commandName === "painel") {
 
 const modo = new StringSelectMenuBuilder()
 .setCustomId("normal_modo")
+.setPlaceholder("Escolha o modo")
 .addOptions(
 { label: "1x1", value: "1x1" },
 { label: "2x2", value: "2x2" },
@@ -126,21 +127,51 @@ new ActionRowBuilder().addComponents(btn)
 
 }
 
+/* ================= SELECT MENU ================= */
+
+if (interaction.isStringSelectMenu()) {
+
+/* NORMAL */
+if (interaction.customId === "normal_modo") {
+
+const modo = interaction.values[0];
+configTemp.set(interaction.user.id, { modo });
+
+return interaction.reply({
+content: "Digite os valores separados por vírgula.\nExemplo: 10,20,30",
+ephemeral: true
+});
+}
+
+/* TREINO MODO */
+if (interaction.customId === "modo_treino") {
+if (!configTemp.has(interaction.user.id))
+configTemp.set(interaction.user.id, {});
+configTemp.get(interaction.user.id).modo = interaction.values[0];
+return interaction.deferUpdate();
+}
+
+/* TREINO TIPO */
+if (interaction.customId === "tipo_treino") {
+if (!configTemp.has(interaction.user.id))
+configTemp.set(interaction.user.id, {});
+configTemp.get(interaction.user.id).tipo = interaction.values[0];
+return interaction.deferUpdate();
+}
+
+}
+
 /* ================= BOTÕES ================= */
 
 if (interaction.isButton()) {
 
-/* 🔥 ENTRAR NORMAL CORRIGIDO DEFINITIVO */
+/* ENTRAR NORMAL */
 if (interaction.customId.startsWith("entrar_normal_")) {
 
 const id = interaction.customId.replace("entrar_normal_", "");
 const fila = filasNormal.get(id);
-
 if (!fila)
 return interaction.reply({ content: "Fila não encontrada.", ephemeral: true });
-
-if (fila.confirmado)
-return interaction.reply({ content: "Fila já confirmada.", ephemeral: true });
 
 if (fila.jogadores.includes(interaction.user.id))
 return interaction.reply({ content: "Você já está na fila.", ephemeral: true });
@@ -150,19 +181,15 @@ return interaction.reply({ content: "Fila cheia.", ephemeral: true });
 
 fila.jogadores.push(interaction.user.id);
 
-/* CORREÇÃO DO ERRO 10062 */
-if (!interaction.deferred && !interaction.replied) {
 await interaction.deferUpdate();
-}
 
 await interaction.message.edit({
 content: gerarMensagemNormal(fila),
 components: interaction.message.components
 });
 
-if (fila.jogadores.length === fila.max) {
+if (fila.jogadores.length === fila.max)
 await criarCanalPrivado(interaction, fila);
-}
 
 return;
 }
@@ -176,14 +203,13 @@ if (!fila) return interaction.deferUpdate();
 
 fila.jogadores = fila.jogadores.filter(x => x !== interaction.user.id);
 
-if (!interaction.deferred && !interaction.replied) {
 await interaction.deferUpdate();
-}
 
 await interaction.message.edit({
 content: gerarMensagemNormal(fila),
 components: interaction.message.components
 });
+
 return;
 }
 
@@ -194,11 +220,59 @@ console.log("ERRO:", err);
 }
 });
 
+/**************** CAPTURAR VALOR ****************/
+
+client.on("messageCreate", async (message) => {
+
+if (message.author.bot) return;
+if (!configTemp.has(message.author.id)) return;
+
+const config = configTemp.get(message.author.id);
+if (!config.modo) return;
+
+const valores = message.content.split(",").map(v => v.trim());
+if (!valores.length) return;
+
+for (let valor of valores) {
+
+const id = Date.now() + Math.random();
+
+const fila = {
+id,
+modo: config.modo,
+tipo: "Normal",
+valor,
+jogadores: [],
+max: MODOS[config.modo]
+};
+
+filasNormal.set(String(id), fila);
+
+const entrar = new ButtonBuilder()
+.setCustomId(`entrar_normal_${id}`)
+.setLabel("Entrar")
+.setStyle(ButtonStyle.Success);
+
+const sair = new ButtonBuilder()
+.setCustomId(`sair_normal_${id}`)
+.setLabel("Sair")
+.setStyle(ButtonStyle.Danger);
+
+const msg = await message.channel.send({
+content: gerarMensagemNormal(fila),
+components: [new ActionRowBuilder().addComponents(entrar, sair)]
+});
+
+}
+
+configTemp.delete(message.author.id);
+});
+
 /**************** FUNÇÕES ****************/
 
 function gerarMensagemNormal(fila) {
 const lista = fila.jogadores.map((id,i)=>`${i+1}. <@${id}>`).join("\n");
-return `💰 Fila ${fila.modo} | ${fila.tipo}
+return `💰 Fila ${fila.modo}
 Valor: ${fila.valor}
 
 ${lista || "Vazio"}
