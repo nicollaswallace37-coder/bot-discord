@@ -34,7 +34,7 @@ const GUILD_ID = process.env.GUILD_ID;
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers // IMPORTANTE
+    GatewayIntentBits.GuildMembers
   ]
 });
 
@@ -45,11 +45,11 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName("fila")
-    .setDescription("Comando principal da fila"),
+    .setDescription("Criar fila pública de treino"),
 
   new SlashCommandBuilder()
     .setName("fila_treino")
-    .setDescription("Criar treino")
+    .setDescription("Criar treino privado")
     .addStringOption(option =>
       option.setName("modo")
         .setDescription("Escolha o modo")
@@ -89,32 +89,50 @@ client.on("interactionCreate", async interaction => {
 
   if (!interaction.inGuild()) return;
 
-  // ===== /fila =====
+  // ============================
+  // /fila (PÚBLICA)
+  // ============================
   if (interaction.isChatInputCommand() && interaction.commandName === "fila") {
+
     await interaction.reply({
-      content: "✅ Comando /fila funcionando normalmente.",
-      ephemeral: true
+      content: "📢 Fila criada! Aguardando jogadores...",
+      ephemeral: false
     });
   }
 
-  // ===== /fila_treino =====
+  // ============================
+  // /fila_treino (PRIVADA)
+  // ============================
   if (interaction.isChatInputCommand() && interaction.commandName === "fila_treino") {
 
     try {
 
       const modo = interaction.options.getString("modo");
 
-      // VERIFICA PERMISSÃO
       if (!interaction.guild.members.me.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
         return interaction.reply({
-          content: "❌ Eu preciso da permissão **Gerenciar Canais**.",
+          content: "❌ Eu preciso da permissão Gerenciar Canais.",
           ephemeral: true
         });
       }
 
+      // 🔥 Categoria já nasce privada
       const categoria = await interaction.guild.channels.create({
         name: `🎮 Treino ${modo}`,
-        type: ChannelType.GuildCategory
+        type: ChannelType.GuildCategory,
+        permissionOverwrites: [
+          {
+            id: interaction.guild.roles.everyone,
+            deny: [PermissionsBitField.Flags.ViewChannel]
+          },
+          {
+            id: interaction.user.id,
+            allow: [
+              PermissionsBitField.Flags.ViewChannel,
+              PermissionsBitField.Flags.SendMessages
+            ]
+          }
+        ]
       });
 
       const canal = await interaction.guild.channels.create({
@@ -122,21 +140,6 @@ client.on("interactionCreate", async interaction => {
         type: ChannelType.GuildText,
         parent: categoria.id
       });
-
-      // PERMISSÕES DEPOIS DE CRIAR
-      await categoria.permissionOverwrites.set([
-        {
-          id: interaction.guild.roles.everyone,
-          deny: [PermissionsBitField.Flags.ViewChannel]
-        },
-        {
-          id: interaction.user.id,
-          allow: [
-            PermissionsBitField.Flags.ViewChannel,
-            PermissionsBitField.Flags.SendMessages
-          ]
-        }
-      ]);
 
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
@@ -162,14 +165,16 @@ Terminando o treino clique no botão abaixo.`,
 
       if (!interaction.replied) {
         await interaction.reply({
-          content: "❌ Deu erro ao criar o treino. Veja o console.",
+          content: "❌ Erro ao criar treino. Veja o console.",
           ephemeral: true
         });
       }
     }
   }
 
-  // ===== BOTÃO ENCERRAR =====
+  // ============================
+  // BOTÃO ENCERRAR
+  // ============================
   if (interaction.isButton() && interaction.customId === "encerrar_treino") {
 
     try {
