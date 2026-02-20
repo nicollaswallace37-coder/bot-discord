@@ -1,16 +1,13 @@
 require("dotenv").config();
 
 /***********************
- * EXPRESS (Render)
+ * EXPRESS (RENDER)
  ***********************/
 const express = require("express");
 const app = express();
 
 app.get("/", (req, res) => res.send("Bot online ✅"));
-
-app.listen(process.env.PORT || 3000, () => {
-  console.log("Servidor web iniciado");
-});
+app.listen(process.env.PORT || 3000);
 
 /***********************
  * DISCORD
@@ -44,12 +41,12 @@ const GUILD_ID = process.env.GUILD_ID;
 const PIX = "450.553.628.98";
 
 /***********************
- * SLASH COMMAND
+ * SLASH
  ***********************/
 const commands = [
   new SlashCommandBuilder()
     .setName("painel")
-    .setDescription("Abrir painel de criação de fila")
+    .setDescription("Abrir painel de criação")
     .toJSON()
 ];
 
@@ -67,29 +64,29 @@ const rest = new REST({ version: "10" }).setToken(TOKEN);
  ***********************/
 const modos = {
   "1x1": 2,
-  "2x2": 4
+  "2x2": 4,
+  "3x3": 6,
+  "4x4": 8
 };
 
 const filas = {};
 const filasTemp = {};
 
 /***********************
- * CALCULAR TAXA
+ * TAXA
  ***********************/
 function calcularTaxa(valor) {
   const numero = parseFloat(valor);
 
   if (numero <= 0.70) return numero + 0.20;
-  if (numero > 1) return numero + numero * 0.20;
-
-  return numero;
+  return numero + numero * 0.20;
 }
 
 /***********************
  * READY
  ***********************/
 client.once("ready", () => {
-  console.log(`Bot logado como ${client.user.tag}`);
+  console.log(`Logado como ${client.user.tag}`);
 });
 
 /***********************
@@ -98,7 +95,6 @@ client.once("ready", () => {
 client.on("interactionCreate", async (interaction) => {
   try {
 
-    /******** SLASH ********/
     if (interaction.isChatInputCommand()) {
 
       if (interaction.commandName === "painel") {
@@ -109,7 +105,9 @@ client.on("interactionCreate", async (interaction) => {
             .setPlaceholder("Escolha o modo")
             .addOptions(
               { label: "1x1", value: "1x1" },
-              { label: "2x2", value: "2x2" }
+              { label: "2x2", value: "2x2" },
+              { label: "3x3", value: "3x3" },
+              { label: "4x4", value: "4x4" }
             )
         );
 
@@ -121,7 +119,6 @@ client.on("interactionCreate", async (interaction) => {
       }
     }
 
-    /******** SELECT MODO ********/
     if (interaction.isStringSelectMenu()) {
 
       if (interaction.customId === "modo_select") {
@@ -133,8 +130,11 @@ client.on("interactionCreate", async (interaction) => {
             .setCustomId(`tipo_${modo}`)
             .setPlaceholder("Escolha o tipo")
             .addOptions(
-              { label: "Mobile", value: "mobile" },
-              { label: "Emulador", value: "emu" }
+              { label: "mobile", value: "mobile" },
+              { label: "emu", value: "emu" },
+              { label: "misto", value: "misto" },
+              { label: "tatico", value: "tatico" },
+              { label: "full soco", value: "full soco" }
             )
         );
 
@@ -158,8 +158,9 @@ client.on("interactionCreate", async (interaction) => {
       }
     }
 
-    /******** BOTÕES ********/
     if (interaction.isButton()) {
+
+      await interaction.deferUpdate();
 
       const [acao, ...resto] = interaction.customId.split("_");
       const key = resto.join("_");
@@ -168,11 +169,10 @@ client.on("interactionCreate", async (interaction) => {
 
       if (acao === "entrar") {
 
-        if (fila.jogadores.includes(interaction.user.id))
-          return interaction.reply({ content: "Você já está na fila.", ephemeral: true });
+        if (!fila.jogadores.includes(interaction.user.id))
+          fila.jogadores.push(interaction.user.id);
 
-        fila.jogadores.push(interaction.user.id);
-        await atualizarFila(interaction, key);
+        await atualizarFila(interaction.message, key);
 
         if (fila.jogadores.length === modos[fila.modo]) {
 
@@ -180,17 +180,18 @@ client.on("interactionCreate", async (interaction) => {
 
           fila.jogadores = [];
 
-          await criarMensagemFila(interaction.channel, key);
+          await atualizarFila(interaction.message, key);
         }
       }
 
       if (acao === "sair") {
+
         fila.jogadores = fila.jogadores.filter(id => id !== interaction.user.id);
-        await atualizarFila(interaction, key);
+        await atualizarFila(interaction.message, key);
       }
 
       if (acao === "confirmar") {
-        await interaction.reply({ content: "Pagamento confirmado ✅", ephemeral: true });
+        await interaction.followUp({ content: "Pagamento confirmado ✅", ephemeral: true });
       }
 
       if (acao === "encerrar") {
@@ -207,6 +208,7 @@ client.on("interactionCreate", async (interaction) => {
  * RECEBER VALORES
  ***********************/
 client.on("messageCreate", async (message) => {
+
   if (message.author.bot) return;
 
   const dados = filasTemp[message.author.id];
@@ -265,7 +267,7 @@ Jogadores (0/${modos[fila.modo]})`
 /***********************
  * ATUALIZAR FILA
  ***********************/
-async function atualizarFila(interaction, key) {
+async function atualizarFila(message, key) {
 
   const fila = filas[key];
 
@@ -275,10 +277,11 @@ async function atualizarFila(interaction, key) {
 `Tipo: ${fila.tipo}
 Valor: R$ ${fila.preco}
 
-Jogadores (${fila.jogadores.length}/${modos[fila.modo]})`
+Jogadores (${fila.jogadores.length}/${modos[fila.modo]})
+${fila.jogadores.map(id => `<@${id}>`).join("\n") || "Nenhum jogador"}`
     );
 
-  await interaction.update({ embeds: [embed] });
+  await message.edit({ embeds: [embed] });
 }
 
 /***********************
@@ -286,11 +289,17 @@ Jogadores (${fila.jogadores.length}/${modos[fila.modo]})`
  ***********************/
 async function criarChatPrivado(guild, fila) {
 
+  const categoria = guild.channels.cache.find(c =>
+    c.name.toLowerCase() === "rush" &&
+    c.type === ChannelType.GuildCategory
+  );
+
   const valorFinal = calcularTaxa(fila.preco).toFixed(2);
 
   const canal = await guild.channels.create({
     name: `partida-${fila.preco}`,
     type: ChannelType.GuildText,
+    parent: categoria ? categoria.id : null,
     permissionOverwrites: [
       {
         id: guild.id,
@@ -315,11 +324,11 @@ ${PIX}`
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId(`confirmar_${fila.preco}`)
+      .setCustomId("confirmar_pagamento")
       .setLabel("Confirmar Pagamento")
       .setStyle(ButtonStyle.Success),
     new ButtonBuilder()
-      .setCustomId(`encerrar_${fila.preco}`)
+      .setCustomId("encerrar_chat")
       .setLabel("Encerrar Chat")
       .setStyle(ButtonStyle.Danger)
   );
