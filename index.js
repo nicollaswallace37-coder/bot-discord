@@ -30,15 +30,18 @@ const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
+/**************** CONFIG ****************/
+
 const MODOS = { "1x1": 2, "2x2": 4, "3x3": 6, "4x4": 8 };
 
+const filasNormal = new Map();
 const filasTreino = new Map();
 const configTemp = new Map();
 
 /**************** SLASH ****************/
 
 const commands = [
-{ name: "painel", description: "Abrir painel normal" },
+{ name: "painel", description: "Abrir painel fila normal" },
 { name: "fila-treino", description: "Criar fila treino" }
 ];
 
@@ -63,10 +66,11 @@ try {
 /* COMANDOS */
 if (interaction.isChatInputCommand()) {
 
+/* PAINEL NORMAL */
 if (interaction.commandName === "painel") {
 
-const menu = new StringSelectMenuBuilder()
-.setCustomId("modo_normal")
+const modo = new StringSelectMenuBuilder()
+.setCustomId("normal_modo")
 .setPlaceholder("Escolha o modo")
 .addOptions(
 { label: "1x1", value: "1x1" },
@@ -76,12 +80,13 @@ const menu = new StringSelectMenuBuilder()
 );
 
 return await interaction.reply({
-content: "Escolha o modo:",
-components: [new ActionRowBuilder().addComponents(menu)],
+content: "🎮 Escolha o modo:",
+components: [new ActionRowBuilder().addComponents(modo)],
 ephemeral: true
 });
 }
 
+/* FILA TREINO */
 if (interaction.commandName === "fila-treino") {
 
 const modo = new StringSelectMenuBuilder()
@@ -99,7 +104,7 @@ const tipo = new StringSelectMenuBuilder()
 .setPlaceholder("Tipo")
 .addOptions(
 { label: "Mobile", value: "Mobile" },
-{ label: "Emulador", value: "Emulador" },
+{ label: "Emu", value: "Emu" },
 { label: "Misto", value: "Misto" },
 { label: "Tático", value: "Tático" },
 { label: "Full Soco", value: "Full Soco" }
@@ -124,13 +129,90 @@ new ActionRowBuilder().addComponents(btn)
 /* SELECT MENU */
 if (interaction.isStringSelectMenu()) {
 
-if (interaction.customId === "modo_normal") {
+/* MODO NORMAL */
+if (interaction.customId === "normal_modo") {
+
+configTemp.set(interaction.user.id, { modo: interaction.values[0] });
+
+const tipo = new StringSelectMenuBuilder()
+.setCustomId("normal_tipo")
+.setPlaceholder("Escolha o tipo")
+.addOptions(
+{ label: "Mobile", value: "Mobile" },
+{ label: "Emu", value: "Emu" },
+{ label: "Misto", value: "Misto" },
+{ label: "Tático", value: "Tático" },
+{ label: "Full Soco", value: "Full Soco" }
+);
+
 return await interaction.update({
-content: `Modo selecionado: ${interaction.values[0]}`,
+content: `Modo: ${interaction.values[0]}\n\nEscolha o tipo:`,
+components: [new ActionRowBuilder().addComponents(tipo)]
+});
+}
+
+/* TIPO NORMAL */
+if (interaction.customId === "normal_tipo") {
+
+configTemp.get(interaction.user.id).tipo = interaction.values[0];
+
+const valor = new StringSelectMenuBuilder()
+.setCustomId("normal_valor")
+.setPlaceholder("Escolha o valor")
+.addOptions(
+{ label: "0.70", value: "0.70" },
+{ label: "1.00", value: "1.00" },
+{ label: "2.00", value: "2.00" },
+{ label: "5.00", value: "5.00" }
+);
+
+return await interaction.update({
+content: `Modo: ${configTemp.get(interaction.user.id).modo}
+Tipo: ${interaction.values[0]}
+
+Escolha o valor:`,
+components: [new ActionRowBuilder().addComponents(valor)]
+});
+}
+
+/* VALOR NORMAL */
+if (interaction.customId === "normal_valor") {
+
+const data = configTemp.get(interaction.user.id);
+data.valor = interaction.values[0];
+
+const id = Date.now().toString();
+
+filasNormal.set(id, {
+modo: data.modo,
+tipo: data.tipo,
+valor: data.valor,
+jogadores: [],
+max: MODOS[data.modo]
+});
+
+const entrar = new ButtonBuilder()
+.setCustomId(`entrar_normal_${id}`)
+.setLabel("Entrar")
+.setStyle(ButtonStyle.Success);
+
+const sair = new ButtonBuilder()
+.setCustomId(`sair_normal_${id}`)
+.setLabel("Sair")
+.setStyle(ButtonStyle.Danger);
+
+await interaction.channel.send({
+content: gerarMensagemNormal(filasNormal.get(id)),
+components: [new ActionRowBuilder().addComponents(entrar, sair)]
+});
+
+return await interaction.update({
+content: "Fila criada com sucesso ✅",
 components: []
 });
 }
 
+/* TREINO CONFIG */
 if (!configTemp.has(interaction.user.id))
 configTemp.set(interaction.user.id, {});
 
@@ -150,16 +232,47 @@ return await interaction.deferUpdate();
 /* BOTÕES */
 if (interaction.isButton()) {
 
+/* ENTRAR NORMAL */
+if (interaction.customId.startsWith("entrar_normal_")) {
+
+await interaction.deferUpdate();
+
+const id = interaction.customId.split("_")[2];
+const fila = filasNormal.get(id);
+if (!fila) return;
+
+if (!fila.jogadores.includes(interaction.user.id) && fila.jogadores.length < fila.max)
+fila.jogadores.push(interaction.user.id);
+
+await interaction.message.edit({
+content: gerarMensagemNormal(fila),
+components: interaction.message.components
+});
+}
+
+/* SAIR NORMAL */
+if (interaction.customId.startsWith("sair_normal_")) {
+
+await interaction.deferUpdate();
+
+const id = interaction.customId.split("_")[2];
+const fila = filasNormal.get(id);
+if (!fila) return;
+
+fila.jogadores = fila.jogadores.filter(x => x !== interaction.user.id);
+
+await interaction.message.edit({
+content: gerarMensagemNormal(fila),
+components: interaction.message.components
+});
+}
+
 /* CRIAR TREINO */
 if (interaction.customId === "criar_treino") {
 
 const data = configTemp.get(interaction.user.id);
-
 if (!data?.modo || !data?.tipo)
-return await interaction.reply({
-content: "Selecione modo e tipo primeiro.",
-ephemeral: true
-});
+return interaction.reply({ content: "Selecione modo e tipo.", ephemeral: true });
 
 const id = Date.now().toString();
 
@@ -171,41 +284,37 @@ max: MODOS[data.modo]
 });
 
 const entrar = new ButtonBuilder()
-.setCustomId(`entrar_${id}`)
+.setCustomId(`entrar_treino_${id}`)
 .setLabel("Entrar")
 .setStyle(ButtonStyle.Primary);
 
 const sair = new ButtonBuilder()
-.setCustomId(`sair_${id}`)
+.setCustomId(`sair_treino_${id}`)
 .setLabel("Sair")
 .setStyle(ButtonStyle.Danger);
 
 await interaction.channel.send({
-content: gerarMensagem(filasTreino.get(id)),
+content: gerarMensagemTreino(filasTreino.get(id)),
 components: [new ActionRowBuilder().addComponents(entrar, sair)]
 });
 
-return await interaction.reply({
-content: "Fila criada.",
-ephemeral: true
-});
+return interaction.reply({ content: "Fila treino criada ✅", ephemeral: true });
 }
 
-/* ENTRAR */
-if (interaction.customId.startsWith("entrar_")) {
+/* ENTRAR TREINO */
+if (interaction.customId.startsWith("entrar_treino_")) {
 
 await interaction.deferUpdate();
 
-const id = interaction.customId.split("_")[1];
+const id = interaction.customId.split("_")[2];
 const fila = filasTreino.get(id);
 if (!fila) return;
 
-if (!fila.jogadores.includes(interaction.user.id) && fila.jogadores.length < fila.max) {
+if (!fila.jogadores.includes(interaction.user.id) && fila.jogadores.length < fila.max)
 fila.jogadores.push(interaction.user.id);
-}
 
 await interaction.message.edit({
-content: gerarMensagem(fila),
+content: gerarMensagemTreino(fila),
 components: interaction.message.components
 });
 
@@ -213,31 +322,34 @@ if (fila.jogadores.length === fila.max) {
 await criarCanal(interaction.guild, fila);
 fila.jogadores = [];
 await interaction.message.edit({
-content: gerarMensagem(fila),
+content: gerarMensagemTreino(fila),
 components: interaction.message.components
 });
 }
 }
 
-/* SAIR */
-if (interaction.customId.startsWith("sair_")) {
+/* SAIR TREINO */
+if (interaction.customId.startsWith("sair_treino_")) {
 
 await interaction.deferUpdate();
 
-const id = interaction.customId.split("_")[1];
+const id = interaction.customId.split("_")[2];
 const fila = filasTreino.get(id);
 if (!fila) return;
 
 fila.jogadores = fila.jogadores.filter(x => x !== interaction.user.id);
 
 await interaction.message.edit({
-content: gerarMensagem(fila),
+content: gerarMensagemTreino(fila),
 components: interaction.message.components
 });
 }
 
-/* ENCERRAR */
+/* ENCERRAR TREINO */
 if (interaction.customId.startsWith("encerrar_")) {
+if (!interaction.member.permissions.has(PermissionFlagsBits.ManageChannels))
+return interaction.reply({ content: "Apenas staff pode encerrar.", ephemeral: true });
+
 await interaction.deferUpdate();
 return interaction.channel.delete();
 }
@@ -250,14 +362,27 @@ console.log("ERRO:", err);
 
 /**************** FUNÇÕES ****************/
 
-function gerarMensagem(fila) {
+function gerarMensagemNormal(fila) {
 const lista = fila.jogadores
 .map((id, i) => `${i + 1}. <@${id}>`)
 .join("\n");
 
-return `🎮 Fila ${fila.modo} | ${fila.tipo}
+return `💰 Fila ${fila.modo} | ${fila.tipo}
+Valor: R$ ${fila.valor}
 
-${lista || "Vazio"}`;
+${lista || "Vazio"}
+Vagas: ${fila.jogadores.length}/${fila.max}`;
+}
+
+function gerarMensagemTreino(fila) {
+const lista = fila.jogadores
+.map((id, i) => `${i + 1}. <@${id}>`)
+.join("\n");
+
+return `🔥 Fila Treino ${fila.modo} | ${fila.tipo}
+
+${lista || "Vazio"}
+Vagas: ${fila.jogadores.length}/${fila.max}`;
 }
 
 async function criarCanal(guild, fila) {
@@ -269,14 +394,22 @@ c => c.name.toLowerCase() === "rush treino" && c.type === ChannelType.GuildCateg
 if (!categoria) return;
 
 const canal = await guild.channels.create({
-name: `treino-${fila.modo}-${fila.tipo}`.toLowerCase(),
+name: `treino-${fila.modo}-${fila.tipo}`.toLowerCase().replace(/ /g, "-"),
 type: ChannelType.GuildText,
 parent: categoria.id,
 permissionOverwrites: [
 { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
+{
+id: guild.members.me.id,
+allow: [
+PermissionFlagsBits.ViewChannel,
+PermissionFlagsBits.SendMessages,
+PermissionFlagsBits.ManageChannels
+]
+},
 ...fila.jogadores.map(id => ({
 id,
-allow: [PermissionFlagsBits.ViewChannel]
+allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages]
 }))
 ]
 });
@@ -287,7 +420,12 @@ const btn = new ButtonBuilder()
 .setStyle(ButtonStyle.Danger);
 
 await canal.send({
-content: "Por favor encerrando o treino aperte em **Encerrar Treino**.\n\nBom treino!",
+content: `🔥 Treino iniciado!
+
+Modo: ${fila.modo}
+Tipo: ${fila.tipo}
+
+Ao finalizar clique em **Encerrar Treino**.`,
 components: [new ActionRowBuilder().addComponents(btn)]
 });
 }
