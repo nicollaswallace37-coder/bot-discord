@@ -8,12 +8,13 @@ const {
   ButtonBuilder,
   ButtonStyle,
   ChannelType,
+  PermissionsBitField,
   REST,
   Routes,
   SlashCommandBuilder
 } = require("discord.js");
 
-/* ================= SERVIDOR PRA RENDER ================= */
+/* ================= SERVIDOR ================= */
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -31,8 +32,7 @@ app.listen(PORT, "0.0.0.0", () => {
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.GuildMessages
+    GatewayIntentBits.GuildMembers
   ]
 });
 
@@ -61,7 +61,7 @@ async function registrarComandos() {
       .setDescription("Criar fila normal")
       .addStringOption(option =>
         option.setName("modo")
-          .setDescription("Modo da partida")
+          .setDescription("Modo")
           .setRequired(true)
           .addChoices(
             { name: "1x1", value: "1x1" },
@@ -69,7 +69,7 @@ async function registrarComandos() {
           ))
       .addStringOption(option =>
         option.setName("tipo")
-          .setDescription("Tipo da partida")
+          .setDescription("Tipo")
           .setRequired(true)
           .addChoices(
             { name: "Mobile", value: "Mobile" },
@@ -81,7 +81,7 @@ async function registrarComandos() {
       .setDescription("Criar fila treino (SEM VALOR)")
       .addStringOption(option =>
         option.setName("modo")
-          .setDescription("Modo da partida")
+          .setDescription("Modo")
           .setRequired(true)
           .addChoices(
             { name: "1x1", value: "1x1" },
@@ -89,7 +89,7 @@ async function registrarComandos() {
           ))
       .addStringOption(option =>
         option.setName("tipo")
-          .setDescription("Tipo da partida")
+          .setDescription("Tipo")
           .setRequired(true)
           .addChoices(
             { name: "Mobile", value: "Mobile" },
@@ -99,19 +99,13 @@ async function registrarComandos() {
 
   const rest = new REST({ version: "10" }).setToken(TOKEN);
 
-  try {
-    console.log("🔄 Registrando comandos...");
-    await rest.put(
-      Routes.applicationCommands(CLIENT_ID),
-      { body: commands }
-    );
-    console.log("✅ Comandos registrados!");
-  } catch (error) {
-    console.error(error);
-  }
-}
+  await rest.put(
+    Routes.applicationCommands(CLIENT_ID),
+    { body: commands }
+  );
 
-/* ================= READY ================= */
+  console.log("✅ Comandos registrados!");
+}
 
 client.once("ready", async () => {
   console.log("🤖 Bot online!");
@@ -122,116 +116,131 @@ client.once("ready", async () => {
 
 client.on("interactionCreate", async interaction => {
 
-  if (!interaction.isChatInputCommand()) return;
+  /* ================= SLASH ================= */
 
-  const modo = interaction.options.getString("modo");
-  const tipo = interaction.options.getString("tipo");
+  if (interaction.isChatInputCommand()) {
 
-  if (!modos[modo] || !tipo) {
-    return interaction.reply({
-      content: "Erro: modo ou tipo inválido.",
-      ephemeral: true
-    });
-  }
+    const modo = interaction.options.getString("modo");
+    const tipo = interaction.options.getString("tipo");
 
-  const id = `${interaction.commandName}_${modo}_${Date.now()}`;
+    if (!modos[modo]) {
+      return interaction.reply({
+        content: "Modo inválido.",
+        ephemeral: true
+      });
+    }
 
-  const isTreino = interaction.commandName === "fila_treino";
+    const id = `${interaction.commandName}_${Date.now()}`;
+    const isTreino = interaction.commandName === "fila_treino";
 
-  filas[id] = {
-    modo,
-    tipo,
-    jogadores: [],
-    treino: isTreino
-  };
+    filas[id] = {
+      modo,
+      tipo,
+      jogadores: [],
+      treino: isTreino
+    };
 
-  const max = modos[modo];
-
-  const embed = new EmbedBuilder()
-    .setTitle(
-      isTreino
-        ? `🔥 Fila Treino ${modo}`
-        : `💰 Fila ${modo}`
-    )
-    .setDescription(
+    const embed = new EmbedBuilder()
+      .setTitle(isTreino ? `🔥 Fila Treino ${modo}` : `💰 Fila ${modo}`)
+      .setDescription(
 `Tipo: ${tipo}
 ${!isTreino ? `Valor: R$ ${precos[modo]}\n` : ""}
-Jogadores (0/${max})`
+Jogadores (0/${modos[modo]})`
+      );
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`entrar_${id}`)
+        .setLabel("Entrar")
+        .setStyle(ButtonStyle.Success)
     );
 
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`entrar_${id}`)
-      .setLabel("Entrar")
-      .setStyle(ButtonStyle.Success)
-  );
-
-  await interaction.reply({ embeds: [embed], components: [row] });
-});
-
-/* ================= BOTÃO ================= */
-
-client.on("interactionCreate", async interaction => {
-
-  if (!interaction.isButton()) return;
-  if (!interaction.customId.startsWith("entrar_")) return;
-
-  const id = interaction.customId.replace("entrar_", "");
-  const fila = filas[id];
-  if (!fila) return;
-
-  if (fila.jogadores.includes(interaction.user.id)) {
     return interaction.reply({
-      content: "Você já entrou!",
-      ephemeral: true
+      embeds: [embed],
+      components: [row]
     });
   }
 
-  fila.jogadores.push(interaction.user.id);
+  /* ================= BOTÃO ================= */
 
-  const max = modos[fila.modo];
+  if (interaction.isButton()) {
 
-  const embed = new EmbedBuilder()
-    .setTitle(fila.treino ? `🔥 Fila Treino ${fila.modo}` : `💰 Fila ${fila.modo}`)
-    .setDescription(
+    if (!interaction.customId.startsWith("entrar_")) return;
+
+    const id = interaction.customId.replace("entrar_", "");
+    const fila = filas[id];
+    if (!fila) return;
+
+    if (fila.jogadores.includes(interaction.user.id)) {
+      return interaction.reply({
+        content: "Você já entrou!",
+        ephemeral: true
+      });
+    }
+
+    fila.jogadores.push(interaction.user.id);
+
+    const max = modos[fila.modo];
+
+    const embed = new EmbedBuilder()
+      .setTitle(fila.treino ? `🔥 Fila Treino ${fila.modo}` : `💰 Fila ${fila.modo}`)
+      .setDescription(
 `Tipo: ${fila.tipo}
 ${!fila.treino ? `Valor: R$ ${precos[fila.modo]}\n` : ""}
 Jogadores (${fila.jogadores.length}/${max})
 ${fila.jogadores.map(id => `<@${id}>`).join("\n")}`
+      );
+
+    await interaction.update({ embeds: [embed] });
+
+    if (fila.jogadores.length < max) return;
+
+    /* ================= CRIAR CATEGORIA SE NÃO EXISTIR ================= */
+
+    const nomeCategoria = fila.treino ? "rush treino" : "rush";
+
+    let categoria = interaction.guild.channels.cache.find(
+      c => c.type === ChannelType.GuildCategory &&
+      c.name.toLowerCase() === nomeCategoria
     );
 
-  await interaction.update({ embeds: [embed] });
+    if (!categoria) {
+      categoria = await interaction.guild.channels.create({
+        name: nomeCategoria,
+        type: ChannelType.GuildCategory
+      });
+    }
 
-  if (fila.jogadores.length < max) return;
+    /* ================= CRIAR CANAL PRIVADO ================= */
 
-  const nomeCategoria = fila.treino ? "rush treino" : "rush";
-
-  const categoria = interaction.guild.channels.cache.find(
-    c =>
-      c.type === ChannelType.GuildCategory &&
-      c.name.toLowerCase() === nomeCategoria
-  );
-
-  if (!categoria) {
-    return interaction.followUp({
-      content: `Categoria "${nomeCategoria}" não encontrada.`,
-      ephemeral: true
+    const canal = await interaction.guild.channels.create({
+      name: `partida-${fila.modo}`,
+      type: ChannelType.GuildText,
+      parent: categoria.id,
+      permissionOverwrites: [
+        {
+          id: interaction.guild.roles.everyone,
+          deny: [PermissionsBitField.Flags.ViewChannel]
+        },
+        ...fila.jogadores.map(id => ({
+          id,
+          allow: [
+            PermissionsBitField.Flags.ViewChannel,
+            PermissionsBitField.Flags.SendMessages
+          ]
+        }))
+      ]
     });
+
+    await canal.send(
+      fila.treino
+        ? "🔥 Treino iniciado! Boa partida!"
+        : "💰 Aguardando confirmação de pagamento."
+    );
+
+    delete filas[id];
   }
 
-  const canal = await interaction.guild.channels.create({
-    name: `partida-${fila.modo}`,
-    type: ChannelType.GuildText,
-    parent: categoria.id
-  });
-
-  await canal.send(
-    fila.treino
-      ? "Treino iniciado! 🔥"
-      : "Aguardando confirmação de pagamento 💰"
-  );
-
-  delete filas[id];
 });
 
 client.login(TOKEN);
