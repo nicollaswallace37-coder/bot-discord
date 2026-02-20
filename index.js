@@ -1,3 +1,21 @@
+require("dotenv").config();
+const express = require("express");
+
+/* ================= SERVIDOR PRA RENDER ================= */
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.get("/", (req, res) => {
+  res.send("Bot online ✅");
+});
+
+app.listen(PORT, () => {
+  console.log(`🌐 Servidor rodando na porta ${PORT}`);
+});
+
+/* ================= DISCORD ================= */
+
 const {
   Client,
   GatewayIntentBits,
@@ -32,7 +50,7 @@ const precos = {
 };
 
 client.once("ready", () => {
-  console.log("Bot online!");
+  console.log("🤖 Bot online!");
 });
 
 client.on("interactionCreate", async interaction => {
