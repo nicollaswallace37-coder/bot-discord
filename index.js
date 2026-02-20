@@ -93,8 +93,7 @@ client.on("interactionCreate", async interaction => {
   // /fila (PÚBLICA)
   // ============================
   if (interaction.isChatInputCommand() && interaction.commandName === "fila") {
-
-    await interaction.reply({
+    return interaction.reply({
       content: "📢 Fila criada! Aguardando jogadores...",
       ephemeral: false
     });
@@ -116,16 +115,17 @@ client.on("interactionCreate", async interaction => {
         });
       }
 
+      // 🔥 CRIAR CATEGORIA PRIVADA
       const categoria = await interaction.guild.channels.create({
         name: `🎮 Treino ${modo}`,
         type: ChannelType.GuildCategory,
         permissionOverwrites: [
           {
-            id: interaction.guild.roles.everyone,
+            id: interaction.guild.roles.everyone.id,
             deny: [PermissionsBitField.Flags.ViewChannel]
           },
           {
-            id: interaction.guild.members.me.id, // 🔥 PERMISSÃO PARA O BOT
+            id: interaction.guild.members.me.id,
             allow: [
               PermissionsBitField.Flags.ViewChannel,
               PermissionsBitField.Flags.SendMessages,
@@ -133,7 +133,7 @@ client.on("interactionCreate", async interaction => {
             ]
           },
           {
-            id: interaction.user.id, // 🔥 PERMISSÃO PARA O CRIADOR
+            id: interaction.user.id,
             allow: [
               PermissionsBitField.Flags.ViewChannel,
               PermissionsBitField.Flags.SendMessages
@@ -142,11 +142,15 @@ client.on("interactionCreate", async interaction => {
         ]
       });
 
+      // 🔥 CRIAR CANAL DENTRO
       const canal = await interaction.guild.channels.create({
         name: `🎮 partida-${modo}`,
         type: ChannelType.GuildText,
         parent: categoria.id
       });
+
+      // 🔥 SALVAR ID DO CRIADOR NO TOPIC
+      await canal.setTopic(`criador:${interaction.user.id}`);
 
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
@@ -158,7 +162,8 @@ client.on("interactionCreate", async interaction => {
       await canal.send({
         content: `🎮 Treino ${modo} iniciado!
 
-Terminando o treino clique no botão abaixo.`,
+Terminando o treino clique no botão abaixo.
+Bom treino 💪`,
         components: [row]
       });
 
@@ -168,11 +173,10 @@ Terminando o treino clique no botão abaixo.`,
       });
 
     } catch (error) {
-      console.error("Erro ao criar treino:", error);
-
+      console.error("ERRO REAL:", error);
       if (!interaction.replied) {
         await interaction.reply({
-          content: "❌ Erro ao criar treino. Veja o console.",
+          content: "❌ Erro ao criar treino. Veja o console do Render.",
           ephemeral: true
         });
       }
@@ -186,17 +190,19 @@ Terminando o treino clique no botão abaixo.`,
 
     try {
 
+      const canal = interaction.channel;
+      const categoria = canal.parent;
+
       const isMediador = interaction.member.roles.cache.some(
         r => r.name.toLowerCase() === "mediador"
       );
 
-      const isCriador = interaction.channel.parent.permissionOverwrites.cache.has(interaction.user.id);
+      const criadorId = canal.topic?.replace("criador:", "");
+      const isCriador = criadorId === interaction.user.id;
 
       if (isMediador || isCriador) {
 
-        const categoria = interaction.channel.parent;
-
-        await interaction.channel.delete().catch(() => {});
+        await canal.delete().catch(() => {});
 
         if (categoria && categoria.children.cache.size === 0) {
           await categoria.delete().catch(() => {});
