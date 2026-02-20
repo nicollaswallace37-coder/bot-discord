@@ -1,298 +1,54 @@
-/***********************
- * EXPRESS (Render)
- ***********************/
-const express = require("express");
-const app = express();
-app.get("/", (req, res) => res.send("Bot online"));
-app.listen(process.env.PORT || 3000);
-
-/***********************
- * DISCORD
- ***********************/
+require("dotenv").config();
 const {
   Client,
   GatewayIntentBits,
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle,
-  StringSelectMenuBuilder,
-  ChannelType,
-  PermissionFlagsBits,
-  REST,
-  Routes,
-  SlashCommandBuilder
+  ButtonStyle
 } = require("discord.js");
 
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.GuildMembers,
     GatewayIntentBits.MessageContent
   ]
 });
 
 const TOKEN = process.env.TOKEN;
-const CLIENT_ID = process.env.CLIENT_ID;
-const GUILD_ID = process.env.GUILD_ID;
+const PIX = "450.553.628.98";
 
-/***********************
- * SLASH
- ***********************/
-const commands = [
-  new SlashCommandBuilder()
-    .setName("painel")
-    .setDescription("Abrir painel")
-    .toJSON()
-];
+const modos = {
+  "1x1": 2,
+  "2x2": 4
+};
 
-const rest = new REST({ version: "10" }).setToken(TOKEN);
-
-(async () => {
-  await rest.put(
-    Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
-    { body: commands }
-  );
-})();
-
-/***********************
- * CONFIG
- ***********************/
-const modos = { "1v1": 2, "2v2": 4, "3v3": 6, "4v4": 8 };
-const filasTemp = {};
 const filas = {};
+const filasTemp = {};
 
-/***********************
- * READY
- ***********************/
-client.once("ready", () => {
-  console.log("Bot online");
-});
+function calcularTaxa(valor) {
+  const numero = parseFloat(valor);
 
-/***********************
- * INTERAÇÕES
- ***********************/
-client.on("interactionCreate", async (interaction) => {
-  try {
-
-    /* SLASH */
-    if (interaction.isChatInputCommand()) {
-
-      if (!interaction.member.roles.cache.some(r =>
-        r.name.toLowerCase() === "mediador"
-      )) {
-        return interaction.reply({ content: "❌ Apenas mediador.", flags: 64 });
-      }
-
-      const row = new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder()
-          .setCustomId("modo_select")
-          .setPlaceholder("Escolha o modo")
-          .addOptions(
-            Object.keys(modos).map(m => ({ label: m, value: m }))
-          )
-      );
-
-      return interaction.reply({
-        content: "Escolha o modo:",
-        components: [row],
-        flags: 64
-      });
-    }
-
-    /* SELECT */
-    if (interaction.isStringSelectMenu()) {
-
-      if (interaction.customId === "modo_select") {
-
-        const modo = interaction.values[0];
-
-        const row = new ActionRowBuilder().addComponents(
-          new StringSelectMenuBuilder()
-            .setCustomId(`tipo_${modo}`)
-            .setPlaceholder("Escolha o tipo")
-            .addOptions([
-              { label: "mobile", value: "mobile" },
-              { label: "emu", value: "emu" },
-              { label: "misto", value: "misto" },
-              { label: "tatico", value: "tatico" },
-              { label: "full soco", value: "full soco" }
-            ])
-        );
-
-        return interaction.update({
-          content: "Escolha o tipo:",
-          components: [row]
-        });
-      }
-
-      if (interaction.customId.startsWith("tipo_")) {
-
-        const modo = interaction.customId.replace("tipo_", "");
-        const tipo = interaction.values[0];
-
-        filasTemp[interaction.user.id] = { modo, tipo };
-
-        return interaction.update({
-          content: "Digite os valores separados por vírgula (ex: 10,20)",
-          components: []
-        });
-      }
-    }
-
-    /***********************
-     * BOTÃO ENTRAR
-     ***********************/
-    if (interaction.isButton() && interaction.customId.startsWith("entrar_")) {
-
-      await interaction.deferUpdate();
-
-      const key = interaction.customId.replace("entrar_", "");
-      const fila = filas[key];
-      if (!fila) return;
-
-      if (fila.jogadores.includes(interaction.user.id)) return;
-
-      fila.jogadores.push(interaction.user.id);
-
-      atualizarMensagemFila(interaction, fila, key);
-    }
-
-    /***********************
-     * BOTÃO SAIR
-     ***********************/
-    if (interaction.isButton() && interaction.customId.startsWith("sair_")) {
-
-      await interaction.deferUpdate();
-
-      const key = interaction.customId.replace("sair_", "");
-      const fila = filas[key];
-      if (!fila) return;
-
-      fila.jogadores = fila.jogadores.filter(id => id !== interaction.user.id);
-
-      atualizarMensagemFila(interaction, fila, key);
-    }
-
-    /***********************
-     * CONFIRMAR
-     ***********************/
-    if (interaction.isButton() && interaction.customId.startsWith("confirmar_")) {
-
-      if (!interaction.member.roles.cache.some(r =>
-        r.name.toLowerCase() === "mediador"
-      )) {
-        return interaction.reply({ content: "❌ Apenas mediador.", flags: 64 });
-      }
-
-      const valor = interaction.customId.replace("confirmar_", "");
-
-      await interaction.reply({ content: "Pagamento confirmado.", flags: 64 });
-
-      await interaction.channel.send(
-`💰 Pix: 450.553.628.98
-Valor: R$ ${valor}`
-      );
-    }
-
-    /***********************
-     * ENCERRAR
-     ***********************/
-    if (interaction.isButton() && interaction.customId === "encerrar_partida") {
-
-      if (!interaction.member.roles.cache.some(r =>
-        r.name.toLowerCase() === "mediador"
-      )) {
-        return interaction.reply({ content: "❌ Apenas mediador.", flags: 64 });
-      }
-
-      await interaction.reply({ content: "Encerrando...", flags: 64 });
-
-      setTimeout(() => {
-        interaction.channel.delete().catch(() => {});
-      }, 1500);
-    }
-
-  } catch (err) {
-    console.log(err);
+  if (numero <= 0.70) {
+    return numero + 0.20;
   }
-});
 
-/***********************
- * FUNÇÃO ATUALIZAR FILA
- ***********************/
-async function atualizarMensagemFila(interaction, fila, key) {
-
-  const max = modos[fila.modo];
-
-  const embed = new EmbedBuilder()
-    .setTitle(`Fila ${fila.modo}`)
-    .setDescription(
-`Tipo: ${fila.tipo}
-Valor: R$ ${fila.preco}
-
-Jogadores (${fila.jogadores.length}/${max})
-${fila.jogadores.map(id => `<@${id}>`).join("\n") || "Nenhum jogador"}`
-    );
-
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`entrar_${key}`)
-      .setLabel("Entrar")
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId(`sair_${key}`)
-      .setLabel("Sair")
-      .setStyle(ButtonStyle.Secondary)
-  );
-
-  await interaction.message.edit({ embeds: [embed], components: [row] });
-
-  if (fila.jogadores.length >= max) {
-
-    const guild = interaction.guild;
-
-    const categoria = guild.channels.cache.find(c =>
-      c.name.toLowerCase() === "rush" &&
-      c.type === ChannelType.GuildCategory
-    );
-
-    const mediador = guild.roles.cache.find(r =>
-      r.name.toLowerCase() === "mediador"
-    );
-
-    const canal = await guild.channels.create({
-      name: `partida-${fila.modo}-${fila.preco}`,
-      type: ChannelType.GuildText,
-      parent: categoria ? categoria.id : null,
-      permissionOverwrites: [
-        {
-          id: guild.roles.everyone.id,
-          deny: [PermissionFlagsBits.ViewChannel]
-        },
-        ...fila.jogadores.map(id => ({
-          id,
-          allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages]
-        })),
-        {
-          id: mediador.id,
-          allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages]
-        }
-      ]
-    });
-
-    await canal.send(`🎮 Partida criada!\n👥 ${fila.jogadores.map(id => `<@${id}>`).join("\n")}`);
-
-    fila.jogadores = [];
+  if (numero > 1) {
+    return numero + numero * 0.20;
   }
+
+  return numero;
 }
+
+client.once("ready", () => {
+  console.log(`Logado como ${client.user.tag}`);
+});
 
 /***********************
  * MESSAGE CREATE
  ***********************/
 client.on("messageCreate", async (message) => {
-
   if (message.author.bot) return;
 
   const dados = filasTemp[message.author.id];
@@ -312,33 +68,149 @@ client.on("messageCreate", async (message) => {
       jogadores: []
     };
 
-    const embed = new EmbedBuilder()
-      .setTitle(`Fila ${dados.modo}`)
-      .setDescription(
-`Tipo: ${dados.tipo}
-Valor: R$ ${valor}
-
-Jogadores (0/${modos[dados.modo]})`
-      );
-
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`entrar_${key}`)
-        .setLabel("Entrar")
-        .setStyle(ButtonStyle.Success),
-      new ButtonBuilder()
-        .setCustomId(`sair_${key}`)
-        .setLabel("Sair")
-        .setStyle(ButtonStyle.Secondary)
-    );
-
-    await message.channel.send({ embeds: [embed], components: [row] });
+    criarMensagemFila(message.channel, key);
   }
 
   await message.delete();
 });
 
 /***********************
- * LOGIN
+ * BOTÕES
  ***********************/
+client.on("interactionCreate", async (interaction) => {
+
+  if (!interaction.isButton()) return;
+
+  const [acao, key] = interaction.customId.split("_");
+
+  const fila = filas[key];
+  if (!fila) return;
+
+  if (acao === "entrar") {
+
+    if (fila.jogadores.includes(interaction.user.id))
+      return interaction.reply({ content: "Você já está na fila.", ephemeral: true });
+
+    fila.jogadores.push(interaction.user.id);
+
+    await atualizarFila(interaction, key);
+
+    if (fila.jogadores.length === modos[fila.modo]) {
+
+      await interaction.followUp({ content: "Fila cheia! Criando chat privado..." });
+
+      await criarChatPrivado(interaction.guild, fila);
+
+      fila.jogadores = [];
+
+      criarMensagemFila(interaction.channel, key);
+    }
+
+  }
+
+  if (acao === "sair") {
+
+    fila.jogadores = fila.jogadores.filter(id => id !== interaction.user.id);
+    await atualizarFila(interaction, key);
+  }
+
+  if (acao === "confirmar") {
+    await interaction.reply({ content: "Pagamento confirmado pelo jogador.", ephemeral: true });
+  }
+
+  if (acao === "encerrar") {
+    await interaction.channel.delete();
+  }
+});
+
+/***********************
+ * FUNÇÕES
+ ***********************/
+
+async function criarMensagemFila(channel, key) {
+
+  const fila = filas[key];
+
+  const embed = new EmbedBuilder()
+    .setTitle(`Fila ${fila.modo}`)
+    .setDescription(
+`Tipo: ${fila.tipo}
+Valor: R$ ${fila.preco}
+
+Jogadores (0/${modos[fila.modo]})`
+    );
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`entrar_${key}`)
+      .setLabel("Entrar")
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId(`sair_${key}`)
+      .setLabel("Sair")
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  await channel.send({ embeds: [embed], components: [row] });
+}
+
+async function atualizarFila(interaction, key) {
+
+  const fila = filas[key];
+
+  const embed = new EmbedBuilder()
+    .setTitle(`Fila ${fila.modo}`)
+    .setDescription(
+`Tipo: ${fila.tipo}
+Valor: R$ ${fila.preco}
+
+Jogadores (${fila.jogadores.length}/${modos[fila.modo]})`
+    );
+
+  await interaction.update({ embeds: [embed] });
+}
+
+async function criarChatPrivado(guild, fila) {
+
+  const valorFinal = calcularTaxa(fila.preco).toFixed(2);
+
+  const canal = await guild.channels.create({
+    name: `partida-${fila.preco}`,
+    type: 0,
+    permissionOverwrites: [
+      {
+        id: guild.id,
+        deny: ["ViewChannel"]
+      },
+      ...fila.jogadores.map(id => ({
+        id,
+        allow: ["ViewChannel"]
+      }))
+    ]
+  });
+
+  const embed = new EmbedBuilder()
+    .setTitle("Pagamento da Partida")
+    .setDescription(
+`Valor da fila: R$ ${fila.preco}
+Valor final com taxa: R$ ${valorFinal}
+
+Chave Pix:
+${PIX}`
+    );
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`confirmar_${fila.preco}`)
+      .setLabel("Confirmar Pagamento")
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId(`encerrar_${fila.preco}`)
+      .setLabel("Encerrar Chat")
+      .setStyle(ButtonStyle.Danger)
+  );
+
+  await canal.send({ embeds: [embed], components: [row] });
+}
+
 client.login(TOKEN);
