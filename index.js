@@ -15,11 +15,13 @@ const {
 const express = require("express");
 const app = express();
 
-const TOKEN = "SEU_TOKEN_AQUI";
-const CLIENT_ID = "SEU_CLIENT_ID_AQUI";
-const GUILD_ID = "SEU_GUILD_ID_AQUI";
+const TOKEN = "COLOQUE_SEU_TOKEN_AQUI";
+const CLIENT_ID = "COLOQUE_SEU_CLIENT_ID_AQUI";
+const GUILD_ID = "COLOQUE_SEU_GUILD_ID_AQUI";
 
-const RUSH_CATEGORY_ID = "ID_DA_CATEGORIA_RUSH";
+// 👇 IDS DAS CATEGORIAS (tudo minúsculo)
+const RUSH_CATEGORY_ID = "COLOQUE_ID_RUSH_AQUI";
+const RUSH_TREINO_CATEGORY_ID = "COLOQUE_ID_RUSH_TREINO_AQUI";
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds]
@@ -27,8 +29,6 @@ const client = new Client({
 
 let filas = {};
 
-
-// ================= EXPRESS (RENDER) =================
 app.get("/", (req, res) => {
   res.send("Bot online");
 });
@@ -36,8 +36,8 @@ app.get("/", (req, res) => {
 app.listen(process.env.PORT || 3000);
 
 
-
 // ================= COMANDOS =================
+
 const commands = [
 
   new SlashCommandBuilder()
@@ -45,7 +45,7 @@ const commands = [
     .setDescription("Abrir painel fila normal")
     .addStringOption(option =>
       option.setName("modo")
-        .setDescription("Modo da fila")
+        .setDescription("Modo")
         .setRequired(true)
         .addChoices(
           { name: "1x1", value: "1x1" },
@@ -57,23 +57,22 @@ const commands = [
         .setDescription("Tipo")
         .setRequired(true)
         .addChoices(
-          { name: "Cash", value: "cash" },
-          { name: "X1", value: "x1" }
+          { name: "cash", value: "cash" },
+          { name: "x1", value: "x1" }
         )
     )
     .addStringOption(option =>
       option.setName("valores")
-        .setDescription("Digite até 15 valores separados por vírgula (ex: 10,20,0.20)")
+        .setDescription("Até 15 valores separados por vírgula")
         .setRequired(true)
     ),
 
-
   new SlashCommandBuilder()
     .setName("fila-treino")
-    .setDescription("Abrir fila de treino")
+    .setDescription("Abrir fila treino")
     .addStringOption(option =>
       option.setName("modo")
-        .setDescription("Modo treino")
+        .setDescription("Modo")
         .setRequired(true)
         .addChoices(
           { name: "1x1", value: "1x1" },
@@ -82,8 +81,6 @@ const commands = [
     )
 
 ].map(cmd => cmd.toJSON());
-
-
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
@@ -94,23 +91,22 @@ const rest = new REST({ version: "10" }).setToken(TOKEN);
   );
 })();
 
-
-
-// ================= READY =================
 client.once("ready", () => {
   console.log("Bot online");
 });
 
 
-
 // ================= INTERAÇÕES =================
+
 client.on("interactionCreate", async interaction => {
 
-  if (interaction.type !== InteractionType.ApplicationCommand &&
-      interaction.type !== InteractionType.MessageComponent) return;
+  if (
+    interaction.type !== InteractionType.ApplicationCommand &&
+    interaction.type !== InteractionType.MessageComponent
+  ) return;
 
+  // ===== PAINEL NORMAL =====
 
-  // ================= PAINEL NORMAL =================
   if (interaction.isChatInputCommand() && interaction.commandName === "painel") {
 
     const modo = interaction.options.getString("modo");
@@ -124,7 +120,7 @@ client.on("interactionCreate", async interaction => {
 
     if (valores.length === 0 || valores.length > 15) {
       return interaction.reply({
-        content: "Você pode colocar entre 1 e 15 valores.",
+        content: "Coloque entre 1 e 15 valores.",
         ephemeral: true
       });
     }
@@ -134,7 +130,6 @@ client.on("interactionCreate", async interaction => {
     filas[filaID] = {
       modo,
       tipo,
-      valores,
       jogadores: []
     };
 
@@ -150,14 +145,14 @@ client.on("interactionCreate", async interaction => {
     });
 
     await interaction.reply({
-      content: `🎮 Fila ${modo} | ${tipo}\nEscolha o valor:`,
+      content: `🎮 fila ${modo} | ${tipo}\nEscolha o valor:`,
       components: [row]
     });
   }
 
 
+  // ===== FILA TREINO =====
 
-  // ================= FILA TREINO =================
   if (interaction.isChatInputCommand() && interaction.commandName === "fila-treino") {
 
     const modo = interaction.options.getString("modo");
@@ -165,44 +160,43 @@ client.on("interactionCreate", async interaction => {
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(`treino_${modo}`)
-        .setLabel("Entrar na fila de treino")
+        .setLabel("Entrar na fila")
         .setStyle(ButtonStyle.Success)
     );
 
     await interaction.reply({
-      content: `🏆 Fila de treino ${modo}`,
+      content: `🏆 fila treino ${modo}`,
       components: [row]
     });
   }
 
 
+  // ===== BOTÕES =====
 
-  // ================= BOTÕES =================
   if (interaction.isButton()) {
 
     // ===== FILA NORMAL =====
+
     if (interaction.customId.startsWith("entrar_")) {
 
       const [, filaID, valor] = interaction.customId.split("_");
       const fila = filas[filaID];
-
       if (!fila) return;
 
-      if (fila.jogadores.find(j => j.id === interaction.user.id)) {
+      if (fila.jogadores.includes(interaction.user.id)) {
         return interaction.reply({ content: "Você já entrou.", ephemeral: true });
       }
 
-      fila.jogadores.push({
-        id: interaction.user.id,
-        tag: interaction.user.tag
-      });
+      fila.jogadores.push(interaction.user.id);
 
-      await interaction.reply({ content: "Você entrou na fila!", ephemeral: true });
+      await interaction.reply({
+        content: "Você entrou na fila.",
+        ephemeral: true
+      });
 
       if (fila.jogadores.length === 2) {
 
-        const mediador = fila.jogadores[0];
-        const jogador = fila.jogadores[1];
+        const [j1, j2] = fila.jogadores;
 
         const canal = await interaction.guild.channels.create({
           name: `rush-${valor}`,
@@ -213,67 +207,76 @@ client.on("interactionCreate", async interaction => {
               id: interaction.guild.roles.everyone,
               deny: [PermissionFlagsBits.ViewChannel]
             },
-            {
-              id: mediador.id,
-              allow: [PermissionFlagsBits.ViewChannel]
-            },
-            {
-              id: jogador.id,
-              allow: [PermissionFlagsBits.ViewChannel]
-            }
+            { id: j1, allow: [PermissionFlagsBits.ViewChannel] },
+            { id: j2, allow: [PermissionFlagsBits.ViewChannel] }
           ]
         });
 
-        const encerrarBtn = new ActionRowBuilder().addComponents(
+        const encerrar = new ActionRowBuilder().addComponents(
           new ButtonBuilder()
-            .setCustomId(`encerrar_${canal.id}_${mediador.id}`)
+            .setCustomId(`encerrar_${canal.id}_${j1}`)
             .setLabel("Encerrar")
             .setStyle(ButtonStyle.Danger)
         );
 
         await canal.send({
-          content: `🎮 Partida iniciada!\nMediador: <@${mediador.id}>\nJogador: <@${jogador.id}>`,
-          components: [encerrarBtn]
+          content: `🎮 partida iniciada\n<@${j1}> vs <@${j2}>`,
+          components: [encerrar]
         });
 
-        delete filas[filaID];
+        // 🔥 substitui automaticamente
+        fila.jogadores = [];
       }
     }
 
 
-
     // ===== TREINO =====
+
     if (interaction.customId.startsWith("treino_")) {
 
+      const modo = interaction.customId.split("_")[1];
+
+      const canal = await interaction.guild.channels.create({
+        name: `rush-treino-${modo}`,
+        type: ChannelType.GuildText,
+        parent: RUSH_TREINO_CATEGORY_ID,
+        permissionOverwrites: [
+          {
+            id: interaction.guild.roles.everyone,
+            deny: [PermissionFlagsBits.ViewChannel]
+          },
+          {
+            id: interaction.user.id,
+            allow: [PermissionFlagsBits.ViewChannel]
+          }
+        ]
+      });
+
       await interaction.reply({
-        content: "Você entrou na fila de treino!",
+        content: `Canal criado: ${canal}`,
         ephemeral: true
       });
     }
 
 
-
     // ===== ENCERRAR =====
+
     if (interaction.customId.startsWith("encerrar_")) {
 
-      const [, canalID, mediadorID] = interaction.customId.split("_");
+      const [, canalID, donoID] = interaction.customId.split("_");
 
-      if (interaction.user.id !== mediadorID) {
+      if (interaction.user.id !== donoID) {
         return interaction.reply({
-          content: "Apenas o mediador pode encerrar.",
+          content: "Só quem iniciou pode encerrar.",
           ephemeral: true
         });
       }
 
       const canal = interaction.guild.channels.cache.get(canalID);
-
-      if (canal) {
-        await canal.delete();
-      }
+      if (canal) await canal.delete();
     }
   }
 
 });
-
 
 client.login(TOKEN);
