@@ -4,14 +4,14 @@ const express = require("express");
 /* ================= SERVIDOR PRA RENDER ================= */
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT;
 
 app.get("/", (req, res) => {
   res.send("Bot online ✅");
 });
 
-app.listen(PORT, () => {
-  console.log(`🌐 Servidor rodando na porta ${PORT}`);
+app.listen(PORT, "0.0.0.0", () => {
+  console.log("🌐 Servidor rodando na porta:", PORT);
 });
 
 /* ================= DISCORD ================= */
@@ -165,8 +165,6 @@ ${fila.jogadores.map(id => `<@${id}>`).join("\n")}`
     await interaction.update({ embeds: [embed] });
 
     if (fila.jogadores.length < max) return;
-
-    /* ===== BUSCAR CATEGORIA PELO NOME ===== */
 
     const nomeCategoria = fila.treino ? "rush treino" : "rush";
 
