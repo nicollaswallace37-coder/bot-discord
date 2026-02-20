@@ -7,7 +7,6 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  PermissionsBitField,
   ChannelType,
   REST,
   Routes,
@@ -17,7 +16,7 @@ const {
 /* ================= SERVIDOR PRA RENDER ================= */
 
 const app = express();
-const PORT = process.env.PORT;
+const PORT = process.env.PORT || 3000;
 
 app.get("/", (req, res) => {
   res.send("Bot online ✅");
@@ -79,7 +78,7 @@ async function registrarComandos() {
 
     new SlashCommandBuilder()
       .setName("fila_treino")
-      .setDescription("Criar fila treino")
+      .setDescription("Criar fila treino (SEM VALOR)")
       .addStringOption(option =>
         option.setName("modo")
           .setDescription("Modo da partida")
@@ -123,110 +122,116 @@ client.once("ready", async () => {
 
 client.on("interactionCreate", async interaction => {
 
-  /* ================= COMANDOS ================= */
+  if (!interaction.isChatInputCommand()) return;
 
-  if (interaction.isChatInputCommand()) {
+  const modo = interaction.options.getString("modo");
+  const tipo = interaction.options.getString("tipo");
 
-    const modo = interaction.options.getString("modo");
-    const tipo = interaction.options.getString("tipo");
-
-    if (!modo || !tipo) {
-      return interaction.reply({
-        content: "Erro: modo ou tipo inválido.",
-        ephemeral: true
-      });
-    }
-
-    const id = `${interaction.commandName}_${modo}_${Date.now()}`;
-
-    filas[id] = {
-      modo,
-      tipo,
-      jogadores: [],
-      treino: interaction.commandName === "fila_treino"
-    };
-
-    const max = modos[modo];
-
-    const embed = new EmbedBuilder()
-      .setTitle(
-        interaction.commandName === "fila_treino"
-          ? `🔥 Fila Treino ${modo}`
-          : `💰 Fila ${modo}`
-      )
-      .setDescription(
-`Tipo: ${tipo}
-${interaction.commandName === "fila" ? `Valor: R$ ${precos[modo]}\n` : ""}
-Jogadores (0/${max})`
-      );
-
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`entrar_${id}`)
-        .setLabel("Entrar")
-        .setStyle(ButtonStyle.Success)
-    );
-
-    await interaction.reply({ embeds: [embed], components: [row] });
+  if (!modos[modo] || !tipo) {
+    return interaction.reply({
+      content: "Erro: modo ou tipo inválido.",
+      ephemeral: true
+    });
   }
 
-  /* ================= BOTÃO ENTRAR ================= */
+  const id = `${interaction.commandName}_${modo}_${Date.now()}`;
 
-  if (interaction.isButton() && interaction.customId.startsWith("entrar_")) {
+  const isTreino = interaction.commandName === "fila_treino";
 
-    const id = interaction.customId.replace("entrar_", "");
-    const fila = filas[id];
-    if (!fila) return;
+  filas[id] = {
+    modo,
+    tipo,
+    jogadores: [],
+    treino: isTreino
+  };
 
-    if (fila.jogadores.includes(interaction.user.id))
-      return interaction.reply({ content: "Você já entrou!", ephemeral: true });
+  const max = modos[modo];
 
-    fila.jogadores.push(interaction.user.id);
+  const embed = new EmbedBuilder()
+    .setTitle(
+      isTreino
+        ? `🔥 Fila Treino ${modo}`
+        : `💰 Fila ${modo}`
+    )
+    .setDescription(
+`Tipo: ${tipo}
+${!isTreino ? `Valor: R$ ${precos[modo]}\n` : ""}
+Jogadores (0/${max})`
+    );
 
-    const max = modos[fila.modo];
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`entrar_${id}`)
+      .setLabel("Entrar")
+      .setStyle(ButtonStyle.Success)
+  );
 
-    const embed = new EmbedBuilder()
-      .setTitle(fila.treino ? `🔥 Fila Treino ${fila.modo}` : `💰 Fila ${fila.modo}`)
-      .setDescription(
+  await interaction.reply({ embeds: [embed], components: [row] });
+});
+
+/* ================= BOTÃO ================= */
+
+client.on("interactionCreate", async interaction => {
+
+  if (!interaction.isButton()) return;
+  if (!interaction.customId.startsWith("entrar_")) return;
+
+  const id = interaction.customId.replace("entrar_", "");
+  const fila = filas[id];
+  if (!fila) return;
+
+  if (fila.jogadores.includes(interaction.user.id)) {
+    return interaction.reply({
+      content: "Você já entrou!",
+      ephemeral: true
+    });
+  }
+
+  fila.jogadores.push(interaction.user.id);
+
+  const max = modos[fila.modo];
+
+  const embed = new EmbedBuilder()
+    .setTitle(fila.treino ? `🔥 Fila Treino ${fila.modo}` : `💰 Fila ${fila.modo}`)
+    .setDescription(
 `Tipo: ${fila.tipo}
 ${!fila.treino ? `Valor: R$ ${precos[fila.modo]}\n` : ""}
 Jogadores (${fila.jogadores.length}/${max})
 ${fila.jogadores.map(id => `<@${id}>`).join("\n")}`
-      );
+    );
 
-    await interaction.update({ embeds: [embed] });
+  await interaction.update({ embeds: [embed] });
 
-    if (fila.jogadores.length < max) return;
+  if (fila.jogadores.length < max) return;
 
-    const nomeCategoria = fila.treino ? "rush treino" : "rush";
+  const nomeCategoria = fila.treino ? "rush treino" : "rush";
 
-    const categoria = interaction.guild.channels.cache.find(
-      c => c.type === ChannelType.GuildCategory &&
+  const categoria = interaction.guild.channels.cache.find(
+    c =>
+      c.type === ChannelType.GuildCategory &&
       c.name.toLowerCase() === nomeCategoria
-    );
+  );
 
-    if (!categoria) {
-      return interaction.followUp({
-        content: `Categoria "${nomeCategoria}" não encontrada.`,
-        ephemeral: true
-      });
-    }
-
-    const canal = await interaction.guild.channels.create({
-      name: `partida-${fila.modo}`,
-      type: ChannelType.GuildText,
-      parent: categoria.id
+  if (!categoria) {
+    return interaction.followUp({
+      content: `Categoria "${nomeCategoria}" não encontrada.`,
+      ephemeral: true
     });
-
-    await canal.send(
-      fila.treino
-        ? "Treino iniciado! 🔥"
-        : "Aguardando confirmação de pagamento 💰"
-    );
-
-    delete filas[id];
   }
 
+  const canal = await interaction.guild.channels.create({
+    name: `partida-${fila.modo}`,
+    type: ChannelType.GuildText,
+    parent: categoria.id
+  });
+
+  await canal.send(
+    fila.treino
+      ? "Treino iniciado! 🔥"
+      : "Aguardando confirmação de pagamento 💰"
+  );
+
+  delete filas[id];
 });
 
 client.login(TOKEN);
