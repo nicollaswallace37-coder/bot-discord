@@ -11,16 +11,16 @@ const {
   Routes
 } = require("discord.js");
 
-const TOKEN = "SEU_TOKEN_AQUI";
-const CLIENT_ID = "SEU_CLIENT_ID_AQUI";
-const GUILD_ID = "SEU_GUILD_ID_AQUI";
+const TOKEN = process.env.TOKEN;
+const CLIENT_ID = process.env.CLIENT_ID;
+const GUILD_ID = process.env.GUILD_ID;
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
 
 // =============================
-// REGISTRAR COMANDO SLASH
+// REGISTRAR COMANDO
 // =============================
 const commands = [
   new SlashCommandBuilder()
@@ -68,47 +68,42 @@ client.once("ready", () => {
 client.on("interactionCreate", async interaction => {
 
   // =============================
-  // CRIAR FILA
+  // CRIAR TREINO
   // =============================
   if (interaction.isChatInputCommand() && interaction.commandName === "fila_treino") {
 
     const modo = interaction.options.getString("modo");
 
-    const jogadores = [interaction.user.id];
-
-    // PERMISSÕES (categoria e canal)
+    // Permissões iniciais (somente criador vê)
     const permissionOverwrites = [
       {
         id: interaction.guild.roles.everyone,
         deny: [PermissionsBitField.Flags.ViewChannel]
-      }
-    ];
-
-    jogadores.forEach(id => {
-      permissionOverwrites.push({
-        id,
+      },
+      {
+        id: interaction.user.id,
         allow: [
           PermissionsBitField.Flags.ViewChannel,
           PermissionsBitField.Flags.SendMessages
         ]
-      });
-    });
+      }
+    ];
 
-    // CRIAR CATEGORIA COM PERMISSÕES
+    // Criar categoria
     const categoria = await interaction.guild.channels.create({
       name: `Treino ${modo}`,
       type: ChannelType.GuildCategory,
       permissionOverwrites
     });
 
-    // CRIAR CANAL HERDANDO DA CATEGORIA
+    // Criar canal dentro da categoria
     const canal = await interaction.guild.channels.create({
       name: `partida-${modo}`,
       type: ChannelType.GuildText,
       parent: categoria.id
     });
 
-    // BOTÃO ENCERRAR
+    // Botão encerrar
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("encerrar_treino")
@@ -117,7 +112,9 @@ client.on("interactionCreate", async interaction => {
     );
 
     await canal.send({
-      content: `🎮 Treino ${modo} criado!\n\nClique abaixo para encerrar.`,
+      content: `🎮 **Treino ${modo} iniciado!**
+
+Terminando o treino clica no botão encerrar treino, bom treino.`,
       components: [row]
     });
 
@@ -132,11 +129,27 @@ client.on("interactionCreate", async interaction => {
   // =============================
   if (interaction.isButton() && interaction.customId === "encerrar_treino") {
 
-    // Permitir se for jogador do canal ou Mediador
-    const isMediador = interaction.member.roles.cache.some(r => r.name === "Mediador");
+    const isMediador = interaction.member.roles.cache.some(
+      r => r.name.toLowerCase() === "mediador"
+    );
 
-    if (isMediador || interaction.channel) {
+    const isJogador = interaction.channel.permissionOverwrites.cache.has(interaction.user.id);
+
+    if (isMediador || isJogador) {
+
+      const categoria = interaction.channel.parent;
+
       await interaction.channel.delete().catch(() => {});
+
+      // Deletar categoria se ficar vazia
+      if (categoria && categoria.children.cache.size === 0) {
+        await categoria.delete().catch(() => {});
+      }
+    } else {
+      await interaction.reply({
+        content: "❌ Você não pode encerrar esse treino.",
+        ephemeral: true
+      });
     }
   }
 
