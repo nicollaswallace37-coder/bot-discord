@@ -1,11 +1,31 @@
 require("dotenv").config();
+
+/***********************
+ * EXPRESS (PORTA RENDER)
+ ***********************/
+const express = require("express");
+const app = express();
+
+app.get("/", (req, res) => {
+  res.send("Bot online ✅");
+});
+
+app.listen(process.env.PORT || 3000, () => {
+  console.log("Servidor web iniciado");
+});
+
+/***********************
+ * DISCORD
+ ***********************/
 const {
   Client,
   GatewayIntentBits,
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle
+  ButtonStyle,
+  ChannelType,
+  PermissionFlagsBits
 } = require("discord.js");
 
 const client = new Client({
@@ -27,6 +47,9 @@ const modos = {
 const filas = {};
 const filasTemp = {};
 
+/***********************
+ * CALCULAR TAXA
+ ***********************/
 function calcularTaxa(valor) {
   const numero = parseFloat(valor);
 
@@ -42,11 +65,11 @@ function calcularTaxa(valor) {
 }
 
 client.once("ready", () => {
-  console.log(`Logado como ${client.user.tag}`);
+  console.log(`Bot logado como ${client.user.tag}`);
 });
 
 /***********************
- * MESSAGE CREATE
+ * RECEBER VALORES
  ***********************/
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
@@ -68,10 +91,10 @@ client.on("messageCreate", async (message) => {
       jogadores: []
     };
 
-    criarMensagemFila(message.channel, key);
+    await criarMensagemFila(message.channel, key);
   }
 
-  await message.delete();
+  await message.delete().catch(() => {});
 });
 
 /***********************
@@ -81,7 +104,8 @@ client.on("interactionCreate", async (interaction) => {
 
   if (!interaction.isButton()) return;
 
-  const [acao, key] = interaction.customId.split("_");
+  const [acao, ...resto] = interaction.customId.split("_");
+  const key = resto.join("_");
 
   const fila = filas[key];
   if (!fila) return;
@@ -97,15 +121,12 @@ client.on("interactionCreate", async (interaction) => {
 
     if (fila.jogadores.length === modos[fila.modo]) {
 
-      await interaction.followUp({ content: "Fila cheia! Criando chat privado..." });
-
       await criarChatPrivado(interaction.guild, fila);
 
       fila.jogadores = [];
 
-      criarMensagemFila(interaction.channel, key);
+      await criarMensagemFila(interaction.channel, key);
     }
-
   }
 
   if (acao === "sair") {
@@ -115,18 +136,17 @@ client.on("interactionCreate", async (interaction) => {
   }
 
   if (acao === "confirmar") {
-    await interaction.reply({ content: "Pagamento confirmado pelo jogador.", ephemeral: true });
+    await interaction.reply({ content: "Pagamento confirmado ✅", ephemeral: true });
   }
 
   if (acao === "encerrar") {
-    await interaction.channel.delete();
+    await interaction.channel.delete().catch(() => {});
   }
 });
 
 /***********************
- * FUNÇÕES
+ * CRIAR FILA
  ***********************/
-
 async function criarMensagemFila(channel, key) {
 
   const fila = filas[key];
@@ -154,6 +174,9 @@ Jogadores (0/${modos[fila.modo]})`
   await channel.send({ embeds: [embed], components: [row] });
 }
 
+/***********************
+ * ATUALIZAR FILA
+ ***********************/
 async function atualizarFila(interaction, key) {
 
   const fila = filas[key];
@@ -170,21 +193,24 @@ Jogadores (${fila.jogadores.length}/${modos[fila.modo]})`
   await interaction.update({ embeds: [embed] });
 }
 
+/***********************
+ * CRIAR CHAT PRIVADO
+ ***********************/
 async function criarChatPrivado(guild, fila) {
 
   const valorFinal = calcularTaxa(fila.preco).toFixed(2);
 
   const canal = await guild.channels.create({
     name: `partida-${fila.preco}`,
-    type: 0,
+    type: ChannelType.GuildText,
     permissionOverwrites: [
       {
         id: guild.id,
-        deny: ["ViewChannel"]
+        deny: [PermissionFlagsBits.ViewChannel]
       },
       ...fila.jogadores.map(id => ({
         id,
-        allow: ["ViewChannel"]
+        allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages]
       }))
     ]
   });
