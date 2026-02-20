@@ -32,7 +32,10 @@ const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds]
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers // IMPORTANTE
+  ]
 });
 
 // =============================
@@ -75,7 +78,7 @@ client.once("ready", async () => {
     );
     console.log("✅ Comandos registrados.");
   } catch (error) {
-    console.error(error);
+    console.error("Erro ao registrar comandos:", error);
   }
 });
 
@@ -84,9 +87,10 @@ client.once("ready", async () => {
 // =============================
 client.on("interactionCreate", async interaction => {
 
+  if (!interaction.inGuild()) return;
+
   // ===== /fila =====
   if (interaction.isChatInputCommand() && interaction.commandName === "fila") {
-
     await interaction.reply({
       content: "✅ Comando /fila funcionando normalmente.",
       ephemeral: true
@@ -96,78 +100,105 @@ client.on("interactionCreate", async interaction => {
   // ===== /fila_treino =====
   if (interaction.isChatInputCommand() && interaction.commandName === "fila_treino") {
 
-    const modo = interaction.options.getString("modo");
+    try {
 
-    const permissionOverwrites = [
-      {
-        id: interaction.guild.roles.everyone,
-        deny: [PermissionsBitField.Flags.ViewChannel]
-      },
-      {
-        id: interaction.user.id,
-        allow: [
-          PermissionsBitField.Flags.ViewChannel,
-          PermissionsBitField.Flags.SendMessages
-        ]
+      const modo = interaction.options.getString("modo");
+
+      // VERIFICA PERMISSÃO
+      if (!interaction.guild.members.me.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
+        return interaction.reply({
+          content: "❌ Eu preciso da permissão **Gerenciar Canais**.",
+          ephemeral: true
+        });
       }
-    ];
 
-    const categoria = await interaction.guild.channels.create({
-      name: `Treino ${modo}`,
-      type: ChannelType.GuildCategory,
-      permissionOverwrites
-    });
+      const categoria = await interaction.guild.channels.create({
+        name: `🎮 Treino ${modo}`,
+        type: ChannelType.GuildCategory
+      });
 
-    const canal = await interaction.guild.channels.create({
-      name: `partida-${modo}`,
-      type: ChannelType.GuildText,
-      parent: categoria.id
-    });
+      const canal = await interaction.guild.channels.create({
+        name: `🎮 partida-${modo}`,
+        type: ChannelType.GuildText,
+        parent: categoria.id
+      });
 
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("encerrar_treino")
-        .setLabel("Encerrar Treino")
-        .setStyle(ButtonStyle.Danger)
-    );
+      // PERMISSÕES DEPOIS DE CRIAR
+      await categoria.permissionOverwrites.set([
+        {
+          id: interaction.guild.roles.everyone,
+          deny: [PermissionsBitField.Flags.ViewChannel]
+        },
+        {
+          id: interaction.user.id,
+          allow: [
+            PermissionsBitField.Flags.ViewChannel,
+            PermissionsBitField.Flags.SendMessages
+          ]
+        }
+      ]);
 
-    await canal.send({
-      content: `🎮 Treino ${modo} iniciado!
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("encerrar_treino")
+          .setLabel("Encerrar Treino")
+          .setStyle(ButtonStyle.Danger)
+      );
 
-Por favor terminando o treino clica no botão encerrar treino, bom treino.`,
-      components: [row]
-    });
+      await canal.send({
+        content: `🎮 Treino ${modo} iniciado!
 
-    await interaction.reply({
-      content: `✅ Treino ${modo} criado.`,
-      ephemeral: true
-    });
+Terminando o treino clique no botão abaixo.`,
+        components: [row]
+      });
+
+      await interaction.reply({
+        content: `✅ Treino ${modo} criado com sucesso.`,
+        ephemeral: true
+      });
+
+    } catch (error) {
+      console.error("Erro ao criar treino:", error);
+
+      if (!interaction.replied) {
+        await interaction.reply({
+          content: "❌ Deu erro ao criar o treino. Veja o console.",
+          ephemeral: true
+        });
+      }
+    }
   }
 
   // ===== BOTÃO ENCERRAR =====
   if (interaction.isButton() && interaction.customId === "encerrar_treino") {
 
-    const isMediador = interaction.member.roles.cache.some(
-      r => r.name.toLowerCase() === "mediador"
-    );
+    try {
 
-    const isCriador = interaction.channel.permissionOverwrites.cache.has(interaction.user.id);
+      const isMediador = interaction.member.roles.cache.some(
+        r => r.name.toLowerCase() === "mediador"
+      );
 
-    if (isMediador || isCriador) {
+      const isCriador = interaction.channel.parent.permissionOverwrites.cache.has(interaction.user.id);
 
-      const categoria = interaction.channel.parent;
+      if (isMediador || isCriador) {
 
-      await interaction.channel.delete().catch(() => {});
+        const categoria = interaction.channel.parent;
 
-      if (categoria && categoria.children.cache.size === 0) {
-        await categoria.delete().catch(() => {});
+        await interaction.channel.delete().catch(() => {});
+
+        if (categoria && categoria.children.cache.size === 0) {
+          await categoria.delete().catch(() => {});
+        }
+
+      } else {
+        await interaction.reply({
+          content: "❌ Você não pode encerrar esse treino.",
+          ephemeral: true
+        });
       }
 
-    } else {
-      await interaction.reply({
-        content: "❌ Você não pode encerrar esse treino.",
-        ephemeral: true
-      });
+    } catch (error) {
+      console.error("Erro ao encerrar treino:", error);
     }
   }
 
