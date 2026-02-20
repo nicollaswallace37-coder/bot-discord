@@ -1,3 +1,19 @@
+require("dotenv").config();
+
+const express = require("express");
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// ===== SERVIDOR PARA RENDER =====
+app.get("/", (req, res) => {
+  res.send("Bot online ✅");
+});
+
+app.listen(PORT, () => {
+  console.log("🌐 Servidor rodando na porta", PORT);
+});
+
+// ===== DISCORD =====
 const {
   Client,
   GatewayIntentBits,
@@ -19,18 +35,15 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
 
-
 // =============================
 // REGISTRAR COMANDOS
 // =============================
 const commands = [
 
-  // COMANDO /fila (antigo)
   new SlashCommandBuilder()
     .setName("fila")
     .setDescription("Comando principal da fila"),
 
-  // COMANDO /fila_treino (novo)
   new SlashCommandBuilder()
     .setName("fila_treino")
     .setDescription("Criar treino")
@@ -52,7 +65,9 @@ const commands = [
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
-(async () => {
+client.once("ready", async () => {
+  console.log(`🤖 Online como ${client.user.tag}`);
+
   try {
     await rest.put(
       Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
@@ -62,25 +77,14 @@ const rest = new REST({ version: "10" }).setToken(TOKEN);
   } catch (error) {
     console.error(error);
   }
-})();
-
-
-// =============================
-// BOT ONLINE
-// =============================
-client.once("ready", () => {
-  console.log(`🤖 Online como ${client.user.tag}`);
 });
-
 
 // =============================
 // INTERAÇÕES
 // =============================
 client.on("interactionCreate", async interaction => {
 
-  // ============================
-  // /fila (ANTIGO)
-  // ============================
+  // ===== /fila =====
   if (interaction.isChatInputCommand() && interaction.commandName === "fila") {
 
     await interaction.reply({
@@ -89,10 +93,7 @@ client.on("interactionCreate", async interaction => {
     });
   }
 
-
-  // ============================
-  // /fila_treino
-  // ============================
+  // ===== /fila_treino =====
   if (interaction.isChatInputCommand() && interaction.commandName === "fila_treino") {
 
     const modo = interaction.options.getString("modo");
@@ -133,7 +134,7 @@ client.on("interactionCreate", async interaction => {
     await canal.send({
       content: `🎮 Treino ${modo} iniciado!
 
-Terminando o treino clica no botão encerrar treino, bom treino.`,
+Por favor terminando o treino clica no botão encerrar treino, bom treino.`,
       components: [row]
     });
 
@@ -143,19 +144,16 @@ Terminando o treino clica no botão encerrar treino, bom treino.`,
     });
   }
 
-
-  // ============================
-  // BOTÃO ENCERRAR
-  // ============================
+  // ===== BOTÃO ENCERRAR =====
   if (interaction.isButton() && interaction.customId === "encerrar_treino") {
 
     const isMediador = interaction.member.roles.cache.some(
       r => r.name.toLowerCase() === "mediador"
     );
 
-    const isJogador = interaction.channel.permissionOverwrites.cache.has(interaction.user.id);
+    const isCriador = interaction.channel.permissionOverwrites.cache.has(interaction.user.id);
 
-    if (isMediador || isJogador) {
+    if (isMediador || isCriador) {
 
       const categoria = interaction.channel.parent;
 
