@@ -82,7 +82,7 @@ client.on("interactionCreate", async (interaction) => {
       if (!interaction.member.roles.cache.some(r =>
         r.name.toLowerCase() === "mediador"
       )) {
-        return interaction.reply({ content: "❌ Apenas mediador.", ephemeral: true });
+        return interaction.reply({ content: "❌ Apenas mediador.", flags: 64 });
       }
 
       const row = new ActionRowBuilder().addComponents(
@@ -97,7 +97,7 @@ client.on("interactionCreate", async (interaction) => {
       return interaction.reply({
         content: "Escolha o modo:",
         components: [row],
-        ephemeral: true
+        flags: 64
       });
     }
 
@@ -181,7 +181,6 @@ ${fila.jogadores.map(id => `<@${id}>`).join("\n")}`
 
       await interaction.message.edit({ embeds: [embed], components: [row] });
 
-      /* SE LOTAR */
       if (fila.jogadores.length >= max) {
 
         const guild = interaction.guild;
@@ -264,34 +263,6 @@ Jogadores (0/${max})`
     }
 
     /***********************
-     * BOTÃO SAIR
-     ***********************/
-    if (interaction.isButton() && interaction.customId.startsWith("sair_")) {
-
-      await interaction.deferUpdate();
-
-      const key = interaction.customId.replace("sair_", "");
-      const fila = filas[key];
-      if (!fila) return;
-
-      fila.jogadores = fila.jogadores.filter(id => id !== interaction.user.id);
-
-      const max = modos[fila.modo];
-
-      const embed = new EmbedBuilder()
-        .setTitle(`Fila ${fila.modo}`)
-        .setDescription(
-`Tipo: ${fila.tipo}
-Valor: R$ ${fila.preco}
-
-Jogadores (${fila.jogadores.length}/${max})
-${fila.jogadores.map(id => `<@${id}>`).join("\n") || "Nenhum jogador"}`
-        );
-
-      await interaction.message.edit({ embeds: [embed] });
-    }
-
-    /***********************
      * CONFIRMAR
      ***********************/
     if (interaction.isButton() && interaction.customId.startsWith("confirmar_")) {
@@ -299,12 +270,12 @@ ${fila.jogadores.map(id => `<@${id}>`).join("\n") || "Nenhum jogador"}`
       if (!interaction.member.roles.cache.some(r =>
         r.name.toLowerCase() === "mediador"
       )) {
-        return interaction.reply({ content: "❌ Apenas mediador.", ephemeral: true });
+        return interaction.reply({ content: "❌ Apenas mediador.", flags: 64 });
       }
 
       const valor = interaction.customId.replace("confirmar_", "");
 
-      await interaction.reply({ content: "Pagamento confirmado.", ephemeral: true });
+      await interaction.reply({ content: "Pagamento confirmado.", flags: 64 });
 
       await interaction.channel.send(
 `💰 Pix: 450.553.628.98
@@ -320,10 +291,10 @@ Valor: R$ ${valor}`
       if (!interaction.member.roles.cache.some(r =>
         r.name.toLowerCase() === "mediador"
       )) {
-        return interaction.reply({ content: "❌ Apenas mediador.", ephemeral: true });
+        return interaction.reply({ content: "❌ Apenas mediador.", flags: 64 });
       }
 
-      await interaction.reply({ content: "Encerrando...", ephemeral: true });
+      await interaction.reply({ content: "Encerrando...", flags: 64 });
 
       setTimeout(() => {
         interaction.channel.delete().catch(() => {});
@@ -335,57 +306,4 @@ Valor: R$ ${valor}`
   }
 });
 
-/***********************
- * MESSAGE CREATE
- ***********************/
-client.on("messageCreate", async (message) => {
-
-  if (message.author.bot) return;
-
-  const dados = filasTemp[message.author.id];
-  if (!dados) return;
-
-  const valores = message.content.split(",").map(v => v.trim());
-  delete filasTemp[message.author.id];
-
-  for (const valor of valores) {
-
-    const key = `${dados.modo}_${dados.tipo}_${valor}`;
-
-    filas[key] = {
-      modo: dados.modo,
-      tipo: dados.tipo,
-      preco: valor,
-      jogadores: []
-    };
-
-    const embed = new EmbedBuilder()
-      .setTitle(`Fila ${dados.modo}`)
-      .setDescription(
-`Tipo: ${dados.tipo}
-Valor: R$ ${valor}
-
-Jogadores (0/${modos[dados.modo]})`
-      );
-
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`entrar_${key}`)
-        .setLabel("Entrar")
-        .setStyle(ButtonStyle.Success),
-      new ButtonBuilder()
-        .setCustomId(`sair_${key}`)
-        .setLabel("Sair")
-        .setStyle(ButtonStyle.Secondary)
-    );
-
-    await message.channel.send({ embeds: [embed], components: [row] });
-  }
-
-  await message.delete();
-});
-
-/***********************
- * LOGIN
- ***********************/
 client.login(TOKEN);
