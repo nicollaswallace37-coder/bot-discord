@@ -116,7 +116,6 @@ client.on("interactionCreate", async interaction => {
         });
       }
 
-      // 🔥 Categoria já nasce privada
       const categoria = await interaction.guild.channels.create({
         name: `🎮 Treino ${modo}`,
         type: ChannelType.GuildCategory,
@@ -126,7 +125,15 @@ client.on("interactionCreate", async interaction => {
             deny: [PermissionsBitField.Flags.ViewChannel]
           },
           {
-            id: interaction.user.id,
+            id: interaction.guild.members.me.id, // 🔥 PERMISSÃO PARA O BOT
+            allow: [
+              PermissionsBitField.Flags.ViewChannel,
+              PermissionsBitField.Flags.SendMessages,
+              PermissionsBitField.Flags.ManageChannels
+            ]
+          },
+          {
+            id: interaction.user.id, // 🔥 PERMISSÃO PARA O CRIADOR
             allow: [
               PermissionsBitField.Flags.ViewChannel,
               PermissionsBitField.Flags.SendMessages
