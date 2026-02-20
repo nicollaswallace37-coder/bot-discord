@@ -1,14 +1,12 @@
 require("dotenv").config();
 
 /***********************
- * EXPRESS (PORTA RENDER)
+ * EXPRESS (Render)
  ***********************/
 const express = require("express");
 const app = express();
 
-app.get("/", (req, res) => {
-  res.send("Bot online ✅");
-});
+app.get("/", (req, res) => res.send("Bot online ✅"));
 
 app.listen(process.env.PORT || 3000, () => {
   console.log("Servidor web iniciado");
@@ -24,8 +22,12 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  StringSelectMenuBuilder,
   ChannelType,
-  PermissionFlagsBits
+  PermissionFlagsBits,
+  REST,
+  Routes,
+  SlashCommandBuilder
 } = require("discord.js");
 
 const client = new Client({
@@ -37,8 +39,32 @@ const client = new Client({
 });
 
 const TOKEN = process.env.TOKEN;
+const CLIENT_ID = process.env.CLIENT_ID;
+const GUILD_ID = process.env.GUILD_ID;
 const PIX = "450.553.628.98";
 
+/***********************
+ * SLASH COMMAND
+ ***********************/
+const commands = [
+  new SlashCommandBuilder()
+    .setName("painel")
+    .setDescription("Abrir painel de criação de fila")
+    .toJSON()
+];
+
+const rest = new REST({ version: "10" }).setToken(TOKEN);
+
+(async () => {
+  await rest.put(
+    Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+    { body: commands }
+  );
+})();
+
+/***********************
+ * CONFIG
+ ***********************/
 const modos = {
   "1x1": 2,
   "2x2": 4
@@ -53,19 +79,128 @@ const filasTemp = {};
 function calcularTaxa(valor) {
   const numero = parseFloat(valor);
 
-  if (numero <= 0.70) {
-    return numero + 0.20;
-  }
-
-  if (numero > 1) {
-    return numero + numero * 0.20;
-  }
+  if (numero <= 0.70) return numero + 0.20;
+  if (numero > 1) return numero + numero * 0.20;
 
   return numero;
 }
 
+/***********************
+ * READY
+ ***********************/
 client.once("ready", () => {
   console.log(`Bot logado como ${client.user.tag}`);
+});
+
+/***********************
+ * INTERAÇÕES
+ ***********************/
+client.on("interactionCreate", async (interaction) => {
+  try {
+
+    /******** SLASH ********/
+    if (interaction.isChatInputCommand()) {
+
+      if (interaction.commandName === "painel") {
+
+        const row = new ActionRowBuilder().addComponents(
+          new StringSelectMenuBuilder()
+            .setCustomId("modo_select")
+            .setPlaceholder("Escolha o modo")
+            .addOptions(
+              { label: "1x1", value: "1x1" },
+              { label: "2x2", value: "2x2" }
+            )
+        );
+
+        return interaction.reply({
+          content: "Escolha o modo:",
+          components: [row],
+          ephemeral: true
+        });
+      }
+    }
+
+    /******** SELECT MODO ********/
+    if (interaction.isStringSelectMenu()) {
+
+      if (interaction.customId === "modo_select") {
+
+        const modo = interaction.values[0];
+
+        const row = new ActionRowBuilder().addComponents(
+          new StringSelectMenuBuilder()
+            .setCustomId(`tipo_${modo}`)
+            .setPlaceholder("Escolha o tipo")
+            .addOptions(
+              { label: "Mobile", value: "mobile" },
+              { label: "Emulador", value: "emu" }
+            )
+        );
+
+        return interaction.update({
+          content: "Escolha o tipo:",
+          components: [row]
+        });
+      }
+
+      if (interaction.customId.startsWith("tipo_")) {
+
+        const modo = interaction.customId.replace("tipo_", "");
+        const tipo = interaction.values[0];
+
+        filasTemp[interaction.user.id] = { modo, tipo };
+
+        return interaction.update({
+          content: "Digite os valores separados por vírgula (ex: 1,2,5)",
+          components: []
+        });
+      }
+    }
+
+    /******** BOTÕES ********/
+    if (interaction.isButton()) {
+
+      const [acao, ...resto] = interaction.customId.split("_");
+      const key = resto.join("_");
+      const fila = filas[key];
+      if (!fila) return;
+
+      if (acao === "entrar") {
+
+        if (fila.jogadores.includes(interaction.user.id))
+          return interaction.reply({ content: "Você já está na fila.", ephemeral: true });
+
+        fila.jogadores.push(interaction.user.id);
+        await atualizarFila(interaction, key);
+
+        if (fila.jogadores.length === modos[fila.modo]) {
+
+          await criarChatPrivado(interaction.guild, fila);
+
+          fila.jogadores = [];
+
+          await criarMensagemFila(interaction.channel, key);
+        }
+      }
+
+      if (acao === "sair") {
+        fila.jogadores = fila.jogadores.filter(id => id !== interaction.user.id);
+        await atualizarFila(interaction, key);
+      }
+
+      if (acao === "confirmar") {
+        await interaction.reply({ content: "Pagamento confirmado ✅", ephemeral: true });
+      }
+
+      if (acao === "encerrar") {
+        await interaction.channel.delete().catch(() => {});
+      }
+    }
+
+  } catch (err) {
+    console.log(err);
+  }
 });
 
 /***********************
@@ -95,53 +230,6 @@ client.on("messageCreate", async (message) => {
   }
 
   await message.delete().catch(() => {});
-});
-
-/***********************
- * BOTÕES
- ***********************/
-client.on("interactionCreate", async (interaction) => {
-
-  if (!interaction.isButton()) return;
-
-  const [acao, ...resto] = interaction.customId.split("_");
-  const key = resto.join("_");
-
-  const fila = filas[key];
-  if (!fila) return;
-
-  if (acao === "entrar") {
-
-    if (fila.jogadores.includes(interaction.user.id))
-      return interaction.reply({ content: "Você já está na fila.", ephemeral: true });
-
-    fila.jogadores.push(interaction.user.id);
-
-    await atualizarFila(interaction, key);
-
-    if (fila.jogadores.length === modos[fila.modo]) {
-
-      await criarChatPrivado(interaction.guild, fila);
-
-      fila.jogadores = [];
-
-      await criarMensagemFila(interaction.channel, key);
-    }
-  }
-
-  if (acao === "sair") {
-
-    fila.jogadores = fila.jogadores.filter(id => id !== interaction.user.id);
-    await atualizarFila(interaction, key);
-  }
-
-  if (acao === "confirmar") {
-    await interaction.reply({ content: "Pagamento confirmado ✅", ephemeral: true });
-  }
-
-  if (acao === "encerrar") {
-    await interaction.channel.delete().catch(() => {});
-  }
 });
 
 /***********************
@@ -194,7 +282,7 @@ Jogadores (${fila.jogadores.length}/${modos[fila.modo]})`
 }
 
 /***********************
- * CRIAR CHAT PRIVADO
+ * CHAT PRIVADO
  ***********************/
 async function criarChatPrivado(guild, fila) {
 
@@ -221,7 +309,7 @@ async function criarChatPrivado(guild, fila) {
 `Valor da fila: R$ ${fila.preco}
 Valor final com taxa: R$ ${valorFinal}
 
-Chave Pix:
+Pix do Mediador:
 ${PIX}`
     );
 
