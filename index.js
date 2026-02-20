@@ -1,11 +1,10 @@
 require("dotenv").config();
 
 /***********************
- * EXPRESS (RENDER)
+ * EXPRESS
  ***********************/
 const express = require("express");
 const app = express();
-
 app.get("/", (req, res) => res.send("Bot online ✅"));
 app.listen(process.env.PORT || 3000);
 
@@ -20,6 +19,9 @@ const {
   ButtonBuilder,
   ButtonStyle,
   StringSelectMenuBuilder,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
   ChannelType,
   PermissionFlagsBits,
   REST,
@@ -51,7 +53,6 @@ const commands = [
 ];
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
-
 (async () => {
   await rest.put(
     Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
@@ -77,14 +78,10 @@ const filasTemp = {};
  ***********************/
 function calcularTaxa(valor) {
   const numero = parseFloat(valor);
-
   if (numero <= 0.70) return numero + 0.20;
   return numero + numero * 0.20;
 }
 
-/***********************
- * READY
- ***********************/
 client.once("ready", () => {
   console.log(`Logado como ${client.user.tag}`);
 });
@@ -93,8 +90,10 @@ client.once("ready", () => {
  * INTERAÇÕES
  ***********************/
 client.on("interactionCreate", async (interaction) => {
+
   try {
 
+    /******** SLASH ********/
     if (interaction.isChatInputCommand()) {
 
       if (interaction.commandName === "painel") {
@@ -119,6 +118,7 @@ client.on("interactionCreate", async (interaction) => {
       }
     }
 
+    /******** SELECT ********/
     if (interaction.isStringSelectMenu()) {
 
       if (interaction.customId === "modo_select") {
@@ -152,50 +152,66 @@ client.on("interactionCreate", async (interaction) => {
         filasTemp[interaction.user.id] = { modo, tipo };
 
         return interaction.update({
-          content: "Digite os valores separados por vírgula (ex: 1,2,5)",
+          content: "Digite os valores separados por vírgula",
           components: []
         });
       }
     }
 
+    /******** BOTÕES DO CHAT ********/
     if (interaction.isButton()) {
 
-      await interaction.deferUpdate();
+      if (interaction.customId === "confirmar_pagamento") {
 
-      const [acao, ...resto] = interaction.customId.split("_");
-      const key = resto.join("_");
-      const fila = filas[key];
-      if (!fila) return;
+        const fila = Object.values(filas).find(f =>
+          f.jogadores.includes(interaction.user.id)
+        );
 
-      if (acao === "entrar") {
+        if (!fila || fila.mediador !== interaction.user.id)
+          return interaction.reply({
+            content: "Apenas o mediador pode usar isso.",
+            ephemeral: true
+          });
 
-        if (!fila.jogadores.includes(interaction.user.id))
-          fila.jogadores.push(interaction.user.id);
+        const modal = new ModalBuilder()
+          .setCustomId("modal_sala")
+          .setTitle("Lançar Sala");
 
-        await atualizarFila(interaction.message, key);
+        const codigo = new TextInputBuilder()
+          .setCustomId("codigo")
+          .setLabel("Código da Sala")
+          .setStyle(TextInputStyle.Short);
 
-        if (fila.jogadores.length === modos[fila.modo]) {
+        const senha = new TextInputBuilder()
+          .setCustomId("senha")
+          .setLabel("Senha da Sala")
+          .setStyle(TextInputStyle.Short);
 
-          await criarChatPrivado(interaction.guild, fila);
+        modal.addComponents(
+          new ActionRowBuilder().addComponents(codigo),
+          new ActionRowBuilder().addComponents(senha)
+        );
 
-          fila.jogadores = [];
-
-          await atualizarFila(interaction.message, key);
-        }
+        return interaction.showModal(modal);
       }
 
-      if (acao === "sair") {
-
-        fila.jogadores = fila.jogadores.filter(id => id !== interaction.user.id);
-        await atualizarFila(interaction.message, key);
+      if (interaction.customId === "encerrar_chat") {
+        return interaction.channel.delete().catch(() => {});
       }
+    }
 
-      if (acao === "confirmar") {
-        await interaction.followUp({ content: "Pagamento confirmado ✅", ephemeral: true });
-      }
+    /******** MODAL ********/
+    if (interaction.isModalSubmit()) {
 
-      if (acao === "encerrar") {
-        await interaction.channel.delete().catch(() => {});
+      if (interaction.customId === "modal_sala") {
+
+        const codigo = interaction.fields.getTextInputValue("codigo");
+        const senha = interaction.fields.getTextInputValue("senha");
+
+        await interaction.reply({
+          content: `🎮 **Sala criada!**\nCódigo: ${codigo}\nSenha: ${senha}`,
+          ephemeral: false
+        });
       }
     }
 
@@ -225,115 +241,14 @@ client.on("messageCreate", async (message) => {
       modo: dados.modo,
       tipo: dados.tipo,
       preco: valor,
-      jogadores: []
+      jogadores: [],
+      mediador: message.author.id
     };
 
-    await criarMensagemFila(message.channel, key);
+    await message.channel.send(`Fila criada por <@${message.author.id}>`);
   }
 
   await message.delete().catch(() => {});
 });
-
-/***********************
- * CRIAR FILA
- ***********************/
-async function criarMensagemFila(channel, key) {
-
-  const fila = filas[key];
-
-  const embed = new EmbedBuilder()
-    .setTitle(`Fila ${fila.modo}`)
-    .setDescription(
-`Tipo: ${fila.tipo}
-Valor: R$ ${fila.preco}
-
-Jogadores (0/${modos[fila.modo]})`
-    );
-
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`entrar_${key}`)
-      .setLabel("Entrar")
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId(`sair_${key}`)
-      .setLabel("Sair")
-      .setStyle(ButtonStyle.Secondary)
-  );
-
-  await channel.send({ embeds: [embed], components: [row] });
-}
-
-/***********************
- * ATUALIZAR FILA
- ***********************/
-async function atualizarFila(message, key) {
-
-  const fila = filas[key];
-
-  const embed = new EmbedBuilder()
-    .setTitle(`Fila ${fila.modo}`)
-    .setDescription(
-`Tipo: ${fila.tipo}
-Valor: R$ ${fila.preco}
-
-Jogadores (${fila.jogadores.length}/${modos[fila.modo]})
-${fila.jogadores.map(id => `<@${id}>`).join("\n") || "Nenhum jogador"}`
-    );
-
-  await message.edit({ embeds: [embed] });
-}
-
-/***********************
- * CHAT PRIVADO
- ***********************/
-async function criarChatPrivado(guild, fila) {
-
-  const categoria = guild.channels.cache.find(c =>
-    c.name.toLowerCase() === "rush" &&
-    c.type === ChannelType.GuildCategory
-  );
-
-  const valorFinal = calcularTaxa(fila.preco).toFixed(2);
-
-  const canal = await guild.channels.create({
-    name: `partida-${fila.preco}`,
-    type: ChannelType.GuildText,
-    parent: categoria ? categoria.id : null,
-    permissionOverwrites: [
-      {
-        id: guild.id,
-        deny: [PermissionFlagsBits.ViewChannel]
-      },
-      ...fila.jogadores.map(id => ({
-        id,
-        allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages]
-      }))
-    ]
-  });
-
-  const embed = new EmbedBuilder()
-    .setTitle("Pagamento da Partida")
-    .setDescription(
-`Valor da fila: R$ ${fila.preco}
-Valor final com taxa: R$ ${valorFinal}
-
-Pix do Mediador:
-${PIX}`
-    );
-
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId("confirmar_pagamento")
-      .setLabel("Confirmar Pagamento")
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId("encerrar_chat")
-      .setLabel("Encerrar Chat")
-      .setStyle(ButtonStyle.Danger)
-  );
-
-  await canal.send({ embeds: [embed], components: [row] });
-}
 
 client.login(TOKEN);
