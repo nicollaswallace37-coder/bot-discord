@@ -30,10 +30,7 @@ app.listen(PORT, "0.0.0.0", () => {
 /* ================= CLIENT ================= */
 
 const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers
-  ]
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
 });
 
 const TOKEN = process.env.TOKEN;
@@ -43,17 +40,36 @@ const filas = {};
 
 const modos = {
   "1x1": 2,
-  "2x2": 4
+  "2x2": 4,
+  "3x3": 6,
+  "4x4": 8
 };
 
 const precos = {
   "1x1": 10,
-  "2x2": 20
+  "2x2": 20,
+  "3x3": 30,
+  "4x4": 40
 };
 
 /* ================= REGISTRAR COMANDOS ================= */
 
 async function registrarComandos() {
+
+  const modosChoices = [
+    { name: "1x1", value: "1x1" },
+    { name: "2x2", value: "2x2" },
+    { name: "3x3", value: "3x3" },
+    { name: "4x4", value: "4x4" }
+  ];
+
+  const tiposChoices = [
+    { name: "Mobile", value: "Mobile" },
+    { name: "Emulador", value: "Emulador" },
+    { name: "Misto", value: "Misto" },
+    { name: "Tático", value: "Tático" },
+    { name: "Full Soco", value: "Full Soco" }
+  ];
 
   const commands = [
     new SlashCommandBuilder()
@@ -63,18 +79,12 @@ async function registrarComandos() {
         option.setName("modo")
           .setDescription("Modo")
           .setRequired(true)
-          .addChoices(
-            { name: "1x1", value: "1x1" },
-            { name: "2x2", value: "2x2" }
-          ))
+          .addChoices(...modosChoices))
       .addStringOption(option =>
         option.setName("tipo")
           .setDescription("Tipo")
           .setRequired(true)
-          .addChoices(
-            { name: "Mobile", value: "Mobile" },
-            { name: "Emulador", value: "Emulador" }
-          )),
+          .addChoices(...tiposChoices)),
 
     new SlashCommandBuilder()
       .setName("fila_treino")
@@ -83,26 +93,16 @@ async function registrarComandos() {
         option.setName("modo")
           .setDescription("Modo")
           .setRequired(true)
-          .addChoices(
-            { name: "1x1", value: "1x1" },
-            { name: "2x2", value: "2x2" }
-          ))
+          .addChoices(...modosChoices))
       .addStringOption(option =>
         option.setName("tipo")
           .setDescription("Tipo")
           .setRequired(true)
-          .addChoices(
-            { name: "Mobile", value: "Mobile" },
-            { name: "Emulador", value: "Emulador" }
-          ))
+          .addChoices(...tiposChoices))
   ].map(cmd => cmd.toJSON());
 
   const rest = new REST({ version: "10" }).setToken(TOKEN);
-
-  await rest.put(
-    Routes.applicationCommands(CLIENT_ID),
-    { body: commands }
-  );
+  await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
 
   console.log("✅ Comandos registrados!");
 }
@@ -123,22 +123,10 @@ client.on("interactionCreate", async interaction => {
     const modo = interaction.options.getString("modo");
     const tipo = interaction.options.getString("tipo");
 
-    if (!modos[modo]) {
-      return interaction.reply({
-        content: "Modo inválido.",
-        ephemeral: true
-      });
-    }
-
     const id = `${interaction.commandName}_${Date.now()}`;
     const isTreino = interaction.commandName === "fila_treino";
 
-    filas[id] = {
-      modo,
-      tipo,
-      jogadores: [],
-      treino: isTreino
-    };
+    filas[id] = { modo, tipo, jogadores: [], treino: isTreino };
 
     const embed = new EmbedBuilder()
       .setTitle(isTreino ? `🔥 Fila Treino ${modo}` : `💰 Fila ${modo}`)
@@ -155,28 +143,19 @@ Jogadores (0/${modos[modo]})`
         .setStyle(ButtonStyle.Success)
     );
 
-    return interaction.reply({
-      embeds: [embed],
-      components: [row]
-    });
+    return interaction.reply({ embeds: [embed], components: [row] });
   }
 
-  /* ================= BOTÃO ================= */
+  /* ================= ENTRAR ================= */
 
-  if (interaction.isButton()) {
-
-    if (!interaction.customId.startsWith("entrar_")) return;
+  if (interaction.isButton() && interaction.customId.startsWith("entrar_")) {
 
     const id = interaction.customId.replace("entrar_", "");
     const fila = filas[id];
     if (!fila) return;
 
-    if (fila.jogadores.includes(interaction.user.id)) {
-      return interaction.reply({
-        content: "Você já entrou!",
-        ephemeral: true
-      });
-    }
+    if (fila.jogadores.includes(interaction.user.id))
+      return interaction.reply({ content: "Você já entrou!", ephemeral: true });
 
     fila.jogadores.push(interaction.user.id);
 
@@ -195,7 +174,20 @@ ${fila.jogadores.map(id => `<@${id}>`).join("\n")}`
 
     if (fila.jogadores.length < max) return;
 
-    /* ================= CRIAR CATEGORIA SE NÃO EXISTIR ================= */
+    /* ================= NOVA FILA AUTOMÁTICA ================= */
+
+    const novaEmbed = EmbedBuilder.from(embed)
+      .setDescription(
+`Tipo: ${fila.tipo}
+${!fila.treino ? `Valor: R$ ${precos[fila.modo]}\n` : ""}
+Jogadores (0/${max})`
+      );
+
+    fila.jogadores = [];
+
+    await interaction.message.edit({ embeds: [novaEmbed] });
+
+    /* ================= CRIAR CATEGORIA ================= */
 
     const nomeCategoria = fila.treino ? "rush treino" : "rush";
 
@@ -211,7 +203,7 @@ ${fila.jogadores.map(id => `<@${id}>`).join("\n")}`
       });
     }
 
-    /* ================= CRIAR CANAL PRIVADO ================= */
+    /* ================= CANAL PRIVADO ================= */
 
     const canal = await interaction.guild.channels.create({
       name: `partida-${fila.modo}`,
@@ -222,23 +214,27 @@ ${fila.jogadores.map(id => `<@${id}>`).join("\n")}`
           id: interaction.guild.roles.everyone,
           deny: [PermissionsBitField.Flags.ViewChannel]
         },
-        ...fila.jogadores.map(id => ({
-          id,
-          allow: [
-            PermissionsBitField.Flags.ViewChannel,
-            PermissionsBitField.Flags.SendMessages
-          ]
-        }))
+        ...interaction.message.embeds[0].description
       ]
     });
 
-    await canal.send(
-      fila.treino
-        ? "🔥 Treino iniciado! Boa partida!"
-        : "💰 Aguardando confirmação de pagamento."
+    const encerrarRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("encerrar_treino")
+        .setLabel("Encerrar Treino")
+        .setStyle(ButtonStyle.Danger)
     );
 
-    delete filas[id];
+    await canal.send({
+      content: "🔥 Treino iniciado!\n\nPor favor, terminando o treino clique no botão **Encerrar Treino**.\nBom treino 💪",
+      components: fila.treino ? [encerrarRow] : []
+    });
+  }
+
+  /* ================= ENCERRAR ================= */
+
+  if (interaction.isButton() && interaction.customId === "encerrar_treino") {
+    await interaction.channel.delete();
   }
 
 });
