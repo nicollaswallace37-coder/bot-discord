@@ -129,11 +129,8 @@ return interaction.showModal(modal);
 
 if (interaction.customId.startsWith("encerrar_")) {
 
-if (
-!interaction.member.roles.cache.some(r => r.name === "Mediador")
-&& !interaction.channel.name.includes("-")
-)
-return interaction.reply({ content: "Sem permissão.", ephemeral: true });
+if (!interaction.member.roles.cache.some(r => r.name === "Mediador"))
+return interaction.reply({ content: "Apenas Mediador pode encerrar.", ephemeral: true });
 
 return interaction.channel.delete();
 }
@@ -148,16 +145,11 @@ const codigo = interaction.fields.getTextInputValue("codigo");
 const senha = interaction.fields.getTextInputValue("senha");
 
 return interaction.reply({
-content: `🎮 SALA LIBERADA
-
-Código: ${codigo}
-Senha: ${senha}`
+content: `🎮 SALA LIBERADA\n\nCódigo: ${codigo}\nSenha: ${senha}`
 });
 }
 
-/* ================= RESTO DO SISTEMA (SEU ORIGINAL) ================= */
-
-/* (⚠️ Mantive exatamente sua lógica original abaixo sem alterar nada) */
+/* ================= RESTO DO SISTEMA ORIGINAL ================= */
 
 if (interaction.isChatInputCommand()) {
 
@@ -201,7 +193,38 @@ ephemeral:true
 
 }
 
-/* ===== SUAS FUNÇÕES FECHAR ATUALIZADAS ===== */
+} catch(err){ console.log(err); }
+});
+
+/**************** FUNÇÕES ****************/
+
+function listarJogadores(lista){
+if(lista.length===0) return "Nenhum jogador ainda.";
+return lista.map(id=>`<@${id}>`).join("\n");
+}
+
+function gerarMensagemNormal(fila){
+return `💰 Fila ${fila.tipo}
+🎮 Modo: ${fila.modo}
+💵 Valor: R$${fila.valor}
+
+👥 Jogadores:
+${listarJogadores(fila.jogadores)}
+
+Vagas: ${fila.jogadores.length}/${fila.max}`;
+}
+
+function gerarMensagemTreino(fila){
+return `🎯 Treino ${fila.tipo}
+🎮 Modo: ${fila.modo}
+
+👥 Jogadores:
+${listarJogadores(fila.jogadores)}
+
+Vagas: ${fila.jogadores.length}/${fila.max}`;
+}
+
+/**************** FECHAR NORMAL ****************/
 
 async function fecharNormal(guild,fila){
 
@@ -230,7 +253,7 @@ allow:[PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages]
 ]
 });
 
-await canal.send(`💰 Valor da partida: R$${valorFinal}
+await canal.send(`💰 Valor da partida (10% taxa inclusa): R$${valorFinal}
 🏦 Pix do Mediador:
 ${CPF_PIX}`);
 
@@ -251,6 +274,8 @@ components:[new ActionRowBuilder().addComponents(confirmar,encerrar)]
 fila.jogadores=[];
 await fila.mensagem.edit({content: gerarMensagemNormal(fila)});
 }
+
+/**************** FECHAR TREINO ****************/
 
 async function fecharTreino(guild,fila){
 
@@ -280,7 +305,6 @@ allow:[PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages]
 await canal.send(`🎯 Treino iniciado!
 
 Terminando o treino aperte em encerrar chat.
-
 Bom treino 🔥`);
 
 const confirmar = new ButtonBuilder()
