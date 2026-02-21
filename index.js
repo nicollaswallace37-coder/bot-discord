@@ -34,7 +34,7 @@ const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
-const CPF_PIX = "450.553.628.98";
+const CPF_PIX = "45055362898";
 const TIPOS = { "1x1":2, "2x2":4, "3x3":6, "4x4":8 };
 const MODOS = ["Mobile","Emu","Misto","Tático","Full Soco"];
 
@@ -56,7 +56,7 @@ Routes.applicationGuildCommands(CLIENT_ID,GUILD_ID),
 })();
 
 client.once("ready",()=>{
-console.log("Bot online");
+console.log("Bot online ✅");
 });
 
 /**************** INTERAÇÕES ****************/
@@ -78,6 +78,7 @@ const menu = new StringSelectMenuBuilder()
 {label:"3x3",value:"3x3"},
 {label:"4x4",value:"4x4"}
 );
+
 return interaction.reply({
 content:"🎮 Escolha o tipo:",
 components:[new ActionRowBuilder().addComponents(menu)],
@@ -95,6 +96,7 @@ const menu = new StringSelectMenuBuilder()
 {label:"3x3",value:"3x3"},
 {label:"4x4",value:"4x4"}
 );
+
 return interaction.reply({
 content:"🎯 Treino - escolha o tipo:",
 components:[new ActionRowBuilder().addComponents(menu)],
@@ -126,31 +128,21 @@ if(interaction.customId.startsWith("normal_modo_")){
 const tipo = interaction.customId.split("_")[2];
 const modo = interaction.values[0];
 
-await interaction.update({
-content:"Digite o valor da partida (apenas número).",
-components:[]
-});
+const modal = new ModalBuilder()
+.setCustomId(`modal_valor_${tipo}_${modo}`)
+.setTitle("Valor da Partida");
 
-const msg = await interaction.channel.awaitMessages({
-filter:m=>m.author.id===interaction.user.id,
-max:1,
-time:30000
-});
+modal.addComponents(
+new ActionRowBuilder().addComponents(
+new TextInputBuilder()
+.setCustomId("valor")
+.setLabel("Digite o valor (apenas número)")
+.setStyle(TextInputStyle.Short)
+.setRequired(true)
+)
+);
 
-if(!msg.size) return;
-
-const valor = Number(msg.first().content);
-if(isNaN(valor)) return interaction.followUp("Valor inválido.");
-
-const fila = {
-tipo,modo,valor,
-jogadores:[],
-max:TIPOS[tipo]
-};
-
-const mensagem = await interaction.channel.send(gerarNormal(fila));
-fila.mensagem = mensagem;
-filasNormal.set(mensagem.id,fila);
+return interaction.showModal(modal);
 }
 
 if(interaction.customId==="treino_tipo"){
@@ -177,7 +169,11 @@ jogadores:[],
 max:TIPOS[tipo]
 };
 
-const mensagem = await interaction.channel.send(gerarTreino(fila));
+const mensagem = await interaction.channel.send({
+content: gerarTreino(fila),
+components: gerarBotoes()
+});
+
 fila.mensagem = mensagem;
 filasTreino.set(mensagem.id,fila);
 
@@ -186,9 +182,71 @@ return interaction.update({content:"Fila treino criada!",components:[]});
 
 }
 
-/* ================= BOTÕES FILA ================= */
+/* ================= MODAL ================= */
+
+if(interaction.isModalSubmit()){
+
+if(interaction.customId.startsWith("modal_valor_")){
+
+const partes = interaction.customId.split("_");
+const tipo = partes[2];
+const modo = partes[3];
+
+const valor = Number(interaction.fields.getTextInputValue("valor"));
+if(isNaN(valor))
+return interaction.reply({content:"Valor inválido.",ephemeral:true});
+
+const fila = {
+tipo,modo,valor,
+jogadores:[],
+max:TIPOS[tipo]
+};
+
+const mensagem = await interaction.channel.send({
+content: gerarNormal(fila),
+components: gerarBotoes()
+});
+
+fila.mensagem = mensagem;
+filasNormal.set(mensagem.id,fila);
+
+return interaction.reply({content:"Fila criada!",ephemeral:true});
+}
+
+}
+
+/* ================= BOTÕES ================= */
 
 if(interaction.isButton()){
+
+if(interaction.customId==="encerrar"){
+if(!interaction.member.roles.cache.some(r=>r.name==="Mediador"))
+return interaction.reply({content:"Apenas Mediador pode encerrar.",ephemeral:true});
+return interaction.channel.delete();
+}
+
+if(interaction.customId.startsWith("confirmar_")){
+const modal = new ModalBuilder()
+.setCustomId("modal_sala")
+.setTitle("Configurar Sala");
+
+modal.addComponents(
+new ActionRowBuilder().addComponents(
+new TextInputBuilder()
+.setCustomId("codigo")
+.setLabel("Código da sala")
+.setStyle(TextInputStyle.Short)
+),
+new ActionRowBuilder().addComponents(
+new TextInputBuilder()
+.setCustomId("senha")
+.setLabel("Senha da sala")
+.setStyle(TextInputStyle.Short)
+)
+);
+
+return interaction.showModal(modal);
+}
 
 const fila = filasNormal.get(interaction.message.id) || filasTreino.get(interaction.message.id);
 if(!fila) return;
@@ -212,48 +270,6 @@ if(fila.valor) fecharNormal(interaction.guild,fila);
 else fecharTreino(interaction.guild,fila);
 }
 
-}
-
-/* ================= CONFIRMAR CHAT ================= */
-
-if(interaction.isButton() && interaction.customId.startsWith("confirmar_")){
-
-if(interaction.customId.includes("normal") &&
-!interaction.member.roles.cache.some(r=>r.name==="Mediador"))
-return interaction.reply({content:"Apenas Mediador.",ephemeral:true});
-
-const modal = new ModalBuilder()
-.setCustomId("modal_sala")
-.setTitle("Configurar Sala");
-
-modal.addComponents(
-new ActionRowBuilder().addComponents(
-new TextInputBuilder()
-.setCustomId("codigo")
-.setLabel("Código da sala")
-.setStyle(TextInputStyle.Short)
-),
-new ActionRowBuilder().addComponents(
-new TextInputBuilder()
-.setCustomId("senha")
-.setLabel("Senha da sala")
-.setStyle(TextInputStyle.Short)
-)
-);
-
-return interaction.showModal(modal);
-}
-
-if(interaction.isModalSubmit()){
-const codigo = interaction.fields.getTextInputValue("codigo");
-const senha = interaction.fields.getTextInputValue("senha");
-return interaction.reply(`🎮 Sala liberada\nCódigo: ${codigo}\nSenha: ${senha}`);
-}
-
-if(interaction.customId==="encerrar"){
-if(!interaction.member.roles.cache.some(r=>r.name==="Mediador"))
-return interaction.reply({content:"Apenas Mediador.",ephemeral:true});
-return interaction.channel.delete();
 }
 
 }catch(e){console.log(e);}
