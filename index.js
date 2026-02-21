@@ -13,6 +13,7 @@ ButtonBuilder,
 ButtonStyle,
 StringSelectMenuBuilder,
 ChannelType,
+PermissionFlagsBits,
 REST,
 Routes
 } = require("discord.js");
@@ -48,7 +49,6 @@ const commands = [
 ];
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
-
 (async () => {
 await rest.put(
 Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
@@ -57,7 +57,7 @@ Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
 })();
 
 client.once("ready", () => {
-console.log(`✅ Online como ${client.user.tag}`);
+console.log(✅ Online como ${client.user.tag});
 });
 
 /**************** INTERAÇÕES ****************/
@@ -185,12 +185,12 @@ mensagem:null
 filasTreino.set(id,fila);
 
 const entrar = new ButtonBuilder()
-.setCustomId(`entrar_treino_${id}`)
+.setCustomId(entrar_treino_${id})
 .setLabel("Entrar")
 .setStyle(ButtonStyle.Success);
 
 const sair = new ButtonBuilder()
-.setCustomId(`sair_treino_${id}`)
+.setCustomId(sair_treino_${id})
 .setLabel("Sair")
 .setStyle(ButtonStyle.Danger);
 
@@ -313,12 +313,12 @@ mensagem:null
 filasNormal.set(id,fila);
 
 const entrar=new ButtonBuilder()
-.setCustomId(`entrar_normal_${id}`)
+.setCustomId(entrar_normal_${id})
 .setLabel("Entrar")
 .setStyle(ButtonStyle.Success);
 
 const sair=new ButtonBuilder()
-.setCustomId(`sair_normal_${id}`)
+.setCustomId(sair_normal_${id})
 .setLabel("Sair")
 .setStyle(ButtonStyle.Danger);
 
@@ -337,7 +337,7 @@ configTemp.delete(message.author.id);
 
 function listarJogadores(lista){
 if(lista.length===0) return "Nenhum jogador ainda.";
-return lista.map(id=>`<@${id}>`).join("\n");
+return lista.map(id=><@${id}>).join("\n");
 }
 
 function gerarMensagemNormal(fila){
@@ -367,7 +367,7 @@ const categoria=guild.channels.cache.find(c=>c.name.toLowerCase()==="rush");
 if(!categoria) return;
 
 await guild.channels.create({
-name:`${fila.tipo}-${fila.valor}`,
+name:${fila.tipo}-${fila.valor},
 type:ChannelType.GuildText,
 parent:categoria.id
 });
@@ -382,7 +382,7 @@ const categoria=guild.channels.cache.find(c=>c.name.toLowerCase()==="rush treino
 if(!categoria) return;
 
 await guild.channels.create({
-name:`${fila.tipo}-${fila.modo}`,
+name:${fila.tipo}-${fila.modo},
 type:ChannelType.GuildText,
 parent:categoria.id
 });
