@@ -65,8 +65,6 @@ console.log(`✅ Online como ${client.user.tag}`);
 client.on("interactionCreate", async (interaction) => {
 try {
 
-/* ================= COMANDOS ================= */
-
 if (interaction.isChatInputCommand()) {
 
 /* NORMAL */
@@ -111,7 +109,7 @@ ephemeral:true
 
 }
 
-/* ================= SELECT ================= */
+/**************** SELECT ****************/
 
 if (interaction.isStringSelectMenu()) {
 
@@ -124,6 +122,23 @@ tipo:interaction.values[0],
 canal:interaction.channel.id
 });
 
+const modoMenu = new StringSelectMenuBuilder()
+.setCustomId("normal_modo")
+.setPlaceholder("Escolha o modo")
+.addOptions(MODOS.map(m=>({label:m,value:m})));
+
+return interaction.update({
+content:"🎮 Escolha o modo:",
+components:[new ActionRowBuilder().addComponents(modoMenu)]
+});
+}
+
+/* NORMAL MODO */
+if (interaction.customId === "normal_modo") {
+
+const config = configTemp.get(interaction.user.id);
+config.modo = interaction.values[0];
+
 return interaction.reply({
 content:"Digite os valores separados por vírgula.\nEx: 10,20,30",
 ephemeral:true
@@ -133,22 +148,16 @@ ephemeral:true
 /* TREINO TIPO */
 if (interaction.customId === "treino_tipo") {
 
-const modoMenu = new StringSelectMenuBuilder()
-.setCustomId("treino_modo")
-.setPlaceholder("Escolha o modo")
-.addOptions(
-{ label:"Mobile", value:"Mobile"},
-{ label:"Emu", value:"Emu"},
-{ label:"Misto", value:"Misto"},
-{ label:"Tático", value:"Tático"},
-{ label:"Full Soco", value:"Full Soco"}
-);
-
 configTemp.set(interaction.user.id,{
 sistema:"treino",
 tipo:interaction.values[0],
 canal:interaction.channel.id
 });
+
+const modoMenu = new StringSelectMenuBuilder()
+.setCustomId("treino_modo")
+.setPlaceholder("Escolha o modo")
+.addOptions(MODOS.map(m=>({label:m,value:m})));
 
 return interaction.update({
 content:"🎯 Escolha o modo:",
@@ -186,7 +195,7 @@ const sair = new ButtonBuilder()
 .setStyle(ButtonStyle.Danger);
 
 const msg = await interaction.channel.send({
-content:gerarMensagemTreino(fila),
+content: gerarMensagemTreino(fila),
 components:[new ActionRowBuilder().addComponents(entrar,sair)]
 });
 
@@ -199,24 +208,22 @@ return interaction.reply({content:"Fila treino criada.",ephemeral:true});
 
 }
 
-/* ================= BOTÕES ================= */
+/**************** BOTÕES ****************/
 
 if (interaction.isButton()) {
 
-/* NORMAL */
+/* ENTRAR NORMAL */
 if (interaction.customId.startsWith("entrar_normal_")) {
 
 const id = interaction.customId.replace("entrar_normal_","");
 const fila = filasNormal.get(id);
 if(!fila) return interaction.deferUpdate();
 
-if(fila.jogadores.includes(interaction.user.id))
-return interaction.reply({content:"Já está na fila.",ephemeral:true});
-
+if(!fila.jogadores.includes(interaction.user.id))
 fila.jogadores.push(interaction.user.id);
 
 await interaction.deferUpdate();
-await fila.mensagem.edit({content:gerarMensagemNormal(fila)});
+await fila.mensagem.edit({content: gerarMensagemNormal(fila)});
 
 if(fila.jogadores.length===fila.max)
 await fecharNormal(interaction.guild,fila);
@@ -224,24 +231,50 @@ await fecharNormal(interaction.guild,fila);
 return;
 }
 
-/* TREINO */
+/* SAIR NORMAL */
+if (interaction.customId.startsWith("sair_normal_")) {
+
+const id = interaction.customId.replace("sair_normal_","");
+const fila = filasNormal.get(id);
+if(!fila) return interaction.deferUpdate();
+
+fila.jogadores = fila.jogadores.filter(x=>x!==interaction.user.id);
+
+await interaction.deferUpdate();
+await fila.mensagem.edit({content: gerarMensagemNormal(fila)});
+return;
+}
+
+/* ENTRAR TREINO */
 if (interaction.customId.startsWith("entrar_treino_")) {
 
 const id = interaction.customId.replace("entrar_treino_","");
 const fila = filasTreino.get(id);
 if(!fila) return interaction.deferUpdate();
 
-if(fila.jogadores.includes(interaction.user.id))
-return interaction.reply({content:"Já está na fila.",ephemeral:true});
-
+if(!fila.jogadores.includes(interaction.user.id))
 fila.jogadores.push(interaction.user.id);
 
 await interaction.deferUpdate();
-await fila.mensagem.edit({content:gerarMensagemTreino(fila)});
+await fila.mensagem.edit({content: gerarMensagemTreino(fila)});
 
 if(fila.jogadores.length===fila.max)
 await fecharTreino(interaction.guild,fila);
 
+return;
+}
+
+/* SAIR TREINO */
+if (interaction.customId.startsWith("sair_treino_")) {
+
+const id = interaction.customId.replace("sair_treino_","");
+const fila = filasTreino.get(id);
+if(!fila) return interaction.deferUpdate();
+
+fila.jogadores = fila.jogadores.filter(x=>x!==interaction.user.id);
+
+await interaction.deferUpdate();
+await fila.mensagem.edit({content: gerarMensagemTreino(fila)});
 return;
 }
 
@@ -250,7 +283,7 @@ return;
 } catch(err){ console.log(err); }
 });
 
-/**************** MESSAGE NORMAL ****************/
+/**************** NORMAL MESSAGE ****************/
 
 client.on("messageCreate", async (message)=>{
 
@@ -266,9 +299,11 @@ const valores = message.content.split(",").map(v=>parseFloat(v.trim()));
 for(const valor of valores){
 
 const id = Date.now().toString()+Math.random();
+
 const fila={
 id,
 tipo:config.tipo,
+modo:config.modo,
 valor,
 jogadores:[],
 max:TIPOS[config.tipo],
@@ -282,9 +317,14 @@ const entrar=new ButtonBuilder()
 .setLabel("Entrar")
 .setStyle(ButtonStyle.Success);
 
+const sair=new ButtonBuilder()
+.setCustomId(`sair_normal_${id}`)
+.setLabel("Sair")
+.setStyle(ButtonStyle.Danger);
+
 const msg=await message.channel.send({
-content:gerarMensagemNormal(fila),
-components:[new ActionRowBuilder().addComponents(entrar)]
+content: gerarMensagemNormal(fila),
+components:[new ActionRowBuilder().addComponents(entrar,sair)]
 });
 
 fila.mensagem=msg;
@@ -295,25 +335,35 @@ configTemp.delete(message.author.id);
 
 /**************** FUNÇÕES ****************/
 
+function listarJogadores(lista){
+if(lista.length===0) return "Nenhum jogador ainda.";
+return lista.map(id=>`<@${id}>`).join("\n");
+}
+
 function gerarMensagemNormal(fila){
 return `💰 Fila ${fila.tipo}
-Valor: R$${fila.valor}
+🎮 Modo: ${fila.modo}
+💵 Valor: R$${fila.valor}
+
+👥 Jogadores:
+${listarJogadores(fila.jogadores)}
 
 Vagas: ${fila.jogadores.length}/${fila.max}`;
 }
 
 function gerarMensagemTreino(fila){
 return `🎯 Treino ${fila.tipo}
-Modo: ${fila.modo}
+🎮 Modo: ${fila.modo}
+
+👥 Jogadores:
+${listarJogadores(fila.jogadores)}
 
 Vagas: ${fila.jogadores.length}/${fila.max}`;
 }
 
 async function fecharNormal(guild,fila){
 
-const categoria=guild.channels.cache
-.find(c=>c.name.toLowerCase()==="rush");
-
+const categoria=guild.channels.cache.find(c=>c.name.toLowerCase()==="rush");
 if(!categoria) return;
 
 await guild.channels.create({
@@ -323,14 +373,12 @@ parent:categoria.id
 });
 
 fila.jogadores=[];
-await fila.mensagem.edit({content:gerarMensagemNormal(fila)});
+await fila.mensagem.edit({content: gerarMensagemNormal(fila)});
 }
 
 async function fecharTreino(guild,fila){
 
-const categoria=guild.channels.cache
-.find(c=>c.name.toLowerCase()==="rush treino");
-
+const categoria=guild.channels.cache.find(c=>c.name.toLowerCase()==="rush treino");
 if(!categoria) return;
 
 await guild.channels.create({
@@ -340,7 +388,7 @@ parent:categoria.id
 });
 
 fila.jogadores=[];
-await fila.mensagem.edit({content:gerarMensagemTreino(fila)});
+await fila.mensagem.edit({content: gerarMensagemTreino(fila)});
 }
 
 client.login(TOKEN);
