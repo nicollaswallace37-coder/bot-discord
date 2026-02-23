@@ -15,7 +15,8 @@ StringSelectMenuBuilder,
 ChannelType,
 PermissionFlagsBits,
 REST,
-Routes
+Routes,
+SlashCommandBuilder
 } = require("discord.js");
 
 const client = new Client({
@@ -41,23 +42,30 @@ const filasNormal = new Map();
 const filasTreino = new Map();
 const configTemp = new Map();
 
-/**************** SLASH ****************/
+/**************** SLASH COMMANDS ****************/
 
 const commands = [
-{ name: "painel", description: "Criar fila normal" },
-{ name: "fila-treino", description: "Criar fila treino" }
-];
+new SlashCommandBuilder()
+.setName("painel")
+.setDescription("Criar fila normal"),
+
+new SlashCommandBuilder()
+.setName("fila-treino")
+.setDescription("Criar fila treino")
+].map(cmd => cmd.toJSON());
+
+client.once("ready", async () => {
+
+console.log(`✅ Online como ${client.user.tag}`);
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
-(async () => {
+
 await rest.put(
 Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
 { body: commands }
 );
-})();
 
-client.once("ready", () => {
-console.log(`✅ Online como ${client.user.tag}`);
+console.log("✅ Slash commands registrados!");
 });
 
 /**************** INTERAÇÕES ****************/
