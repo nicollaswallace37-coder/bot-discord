@@ -74,7 +74,6 @@ if (interaction.commandName === "painel") {
 
 const tipoMenu = new StringSelectMenuBuilder()
 .setCustomId("normal_tipo")
-.setPlaceholder("Escolha o tipo")
 .addOptions(
 { label:"1x1", value:"1x1"},
 { label:"2x2", value:"2x2"},
@@ -94,7 +93,6 @@ if (interaction.commandName === "fila-treino") {
 
 const tipoMenu = new StringSelectMenuBuilder()
 .setCustomId("treino_tipo")
-.setPlaceholder("Escolha o tipo")
 .addOptions(
 { label:"1x1", value:"1x1"},
 { label:"2x2", value:"2x2"},
@@ -126,7 +124,6 @@ canal:interaction.channel.id
 
 const modoMenu = new StringSelectMenuBuilder()
 .setCustomId("normal_modo")
-.setPlaceholder("Escolha o modo")
 .addOptions(MODOS.map(m=>({label:m,value:m})));
 
 return interaction.update({
@@ -140,13 +137,13 @@ if (interaction.customId === "normal_modo") {
 
 const config = configTemp.get(interaction.user.id);
 if(!config)
-return interaction.reply({content:"Configuração expirada.",ephemeral:true});
+return interaction.update({content:"Configuração expirada.",components:[]});
 
 config.modo = interaction.values[0];
 
-return interaction.reply({
+return interaction.update({
 content:"Digite os valores separados por vírgula.\nEx: 10,20,30",
-ephemeral:true
+components:[]
 });
 }
 
@@ -161,7 +158,6 @@ canal:interaction.channel.id
 
 const modoMenu = new StringSelectMenuBuilder()
 .setCustomId("treino_modo")
-.setPlaceholder("Escolha o modo")
 .addOptions(MODOS.map(m=>({label:m,value:m})));
 
 return interaction.update({
@@ -175,7 +171,7 @@ if (interaction.customId === "treino_modo") {
 
 const config = configTemp.get(interaction.user.id);
 if(!config)
-return interaction.reply({content:"Configuração expirada.",ephemeral:true});
+return interaction.update({content:"Configuração expirada.",components:[]});
 
 config.modo = interaction.values[0];
 
@@ -210,7 +206,10 @@ components:[new ActionRowBuilder().addComponents(entrar,sair)]
 fila.mensagem = msg;
 configTemp.delete(interaction.user.id);
 
-return interaction.reply({content:"Fila treino criada.",ephemeral:true});
+return interaction.update({
+content:"Fila treino criada com sucesso ✅",
+components:[]
+});
 }
 
 }
@@ -272,119 +271,3 @@ return;
 console.log("ERRO:",err);
 }
 });
-
-/**************** MESSAGE ****************/
-
-client.on("messageCreate", async (message)=>{
-
-if(message.author.bot) return;
-if(!configTemp.has(message.author.id)) return;
-
-const config = configTemp.get(message.author.id);
-if(!config || config.sistema!=="normal") return;
-if(message.channel.id!==config.canal) return;
-
-const valores = message.content.split(",").map(v=>parseFloat(v.trim()));
-
-for(const valor of valores){
-
-const id = Date.now().toString()+Math.random();
-
-const fila={
-id,
-tipo:config.tipo,
-modo:config.modo,
-valor,
-jogadores:[],
-max:TIPOS[config.tipo],
-mensagem:null
-};
-
-filasNormal.set(id,fila);
-
-const entrar=new ButtonBuilder()
-.setCustomId(`entrar_normal_${id}`)
-.setLabel("Entrar")
-.setStyle(ButtonStyle.Success);
-
-const sair=new ButtonBuilder()
-.setCustomId(`sair_normal_${id}`)
-.setLabel("Sair")
-.setStyle(ButtonStyle.Danger);
-
-const msg=await message.channel.send({
-content: gerarMensagemNormal(fila),
-components:[new ActionRowBuilder().addComponents(entrar,sair)]
-});
-
-fila.mensagem=msg;
-}
-
-configTemp.delete(message.author.id);
-});
-
-/**************** FUNÇÕES ****************/
-
-function listarJogadores(lista){
-if(lista.length===0) return "Nenhum jogador ainda.";
-return lista.map(id=>`<@${id}>`).join("\n");
-}
-
-function gerarMensagemNormal(fila){
-return `💰 Fila ${fila.tipo}
-🎮 Modo: ${fila.modo}
-💵 Valor: R$${fila.valor}
-
-👥 Jogadores:
-${listarJogadores(fila.jogadores)}
-
-Vagas: ${fila.jogadores.length}/${fila.max}`;
-}
-
-function gerarMensagemTreino(fila){
-return `🎯 Treino ${fila.tipo}
-🎮 Modo: ${fila.modo}
-
-👥 Jogadores:
-${listarJogadores(fila.jogadores)}
-
-Vagas: ${fila.jogadores.length}/${fila.max}`;
-}
-
-async function fecharNormal(guild,fila){
-
-const categoria = guild.channels.cache.find(
-c => c.name.toLowerCase()==="rush" && c.type===ChannelType.GuildCategory
-);
-
-if(!categoria) return console.log("Categoria rush não encontrada");
-
-await guild.channels.create({
-name:`${fila.tipo}-${fila.valor}`,
-type:ChannelType.GuildText,
-parent:categoria.id
-});
-
-fila.jogadores=[];
-await fila.mensagem.edit({content: gerarMensagemNormal(fila)});
-}
-
-async function fecharTreino(guild,fila){
-
-const categoria = guild.channels.cache.find(
-c => c.name.toLowerCase()==="rush treino" && c.type===ChannelType.GuildCategory
-);
-
-if(!categoria) return console.log("Categoria rush treino não encontrada");
-
-await guild.channels.create({
-name:`${fila.tipo}-${fila.modo}`,
-type:ChannelType.GuildText,
-parent:categoria.id
-});
-
-fila.jogadores=[];
-await fila.mensagem.edit({content: gerarMensagemTreino(fila)});
-}
-
-client.login(TOKEN);
