@@ -17,8 +17,7 @@ REST,
 Routes,
 ModalBuilder,
 TextInputBuilder,
-TextInputStyle,
-PermissionFlagsBits
+TextInputStyle
 } = require("discord.js");
 
 const client = new Client({
@@ -209,76 +208,68 @@ return interaction.reply({content:"Fila treino criada.",ephemeral:true});
 
 if (interaction.isButton()) {
 
-/* CONFIRMAR SALA */
-if(interaction.customId.startsWith("confirmar_")){
+/* ENTRAR TREINO */
+if (interaction.customId.startsWith("entrar_treino_")) {
 
-if(interaction.user.id !== MEDIADOR_ID)
-return interaction.reply({content:"Apenas o mediador pode usar.",ephemeral:true});
+const id = interaction.customId.replace("entrar_treino_","");
+const fila = filasTreino.get(id);
+if(!fila) return interaction.deferUpdate();
 
-const filaId = interaction.customId.replace("confirmar_","");
+if(!fila.jogadores.includes(interaction.user.id))
+fila.jogadores.push(interaction.user.id);
 
-const modal = new ModalBuilder()
-.setCustomId(`modal_${filaId}`)
-.setTitle("Configurar Sala");
-
-const codigoInput = new TextInputBuilder()
-.setCustomId("codigo")
-.setLabel("Código da Sala")
-.setStyle(TextInputStyle.Short)
-.setRequired(true);
-
-const senhaInput = new TextInputBuilder()
-.setCustomId("senha")
-.setLabel("Senha da Sala")
-.setStyle(TextInputStyle.Short)
-.setRequired(true);
-
-modal.addComponents(
-new ActionRowBuilder().addComponents(codigoInput),
-new ActionRowBuilder().addComponents(senhaInput)
-);
-
-return interaction.showModal(modal);
-}
-
-/* ENCERRAR */
-if(interaction.customId.startsWith("encerrar_")){
-
-if(interaction.user.id !== MEDIADOR_ID)
-return interaction.reply({content:"Apenas o mediador pode usar.",ephemeral:true});
-
-await interaction.reply({content:"Encerrando partida...",ephemeral:true});
-setTimeout(()=> interaction.channel.delete().catch(()=>{}),2000);
+await interaction.deferUpdate();
+await fila.mensagem.edit({content: gerarMensagemTreino(fila)});
 return;
 }
+
+/* SAIR TREINO */
+if (interaction.customId.startsWith("sair_treino_")) {
+
+const id = interaction.customId.replace("sair_treino_","");
+const fila = filasTreino.get(id);
+if(!fila) return interaction.deferUpdate();
+
+fila.jogadores = fila.jogadores.filter(x=>x!==interaction.user.id);
+
+await interaction.deferUpdate();
+await fila.mensagem.edit({content: gerarMensagemTreino(fila)});
+return;
 }
 
-/**************** MODAL ****************/
+/* ENTRAR NORMAL */
+if (interaction.customId.startsWith("entrar_normal_")) {
 
-if(interaction.isModalSubmit()){
+const id = interaction.customId.replace("entrar_normal_","");
+const fila = filasNormal.get(id);
+if(!fila) return interaction.deferUpdate();
 
-if(!interaction.customId.startsWith("modal_")) return;
+if(!fila.jogadores.includes(interaction.user.id))
+fila.jogadores.push(interaction.user.id);
 
-if(interaction.user.id !== MEDIADOR_ID)
-return interaction.reply({content:"Apenas mediador.",ephemeral:true});
+await interaction.deferUpdate();
+await fila.mensagem.edit({content: gerarMensagemNormal(fila)});
 
-const filaId = interaction.customId.replace("modal_","");
-const fila = filasNormal.get(filaId);
-if(!fila) return interaction.reply({content:"Fila não encontrada.",ephemeral:true});
+if(fila.jogadores.length===fila.max)
+await fecharNormal(interaction.guild,fila);
 
-const codigo = interaction.fields.getTextInputValue("codigo");
-const senha = interaction.fields.getTextInputValue("senha");
+return;
+}
 
-const canal = interaction.guild.channels.cache.get(fila.canalPartida);
+/* SAIR NORMAL */
+if (interaction.customId.startsWith("sair_normal_")) {
 
-await canal.send(`
-🎮 **SALA LIBERADA**
+const id = interaction.customId.replace("sair_normal_","");
+const fila = filasNormal.get(id);
+if(!fila) return interaction.deferUpdate();
 
-📌 Código: ${codigo}
-🔑 Senha: ${senha}
-`);
+fila.jogadores = fila.jogadores.filter(x=>x!==interaction.user.id);
 
-return interaction.reply({content:"Sala enviada no canal.",ephemeral:true});
+await interaction.deferUpdate();
+await fila.mensagem.edit({content: gerarMensagemNormal(fila)});
+return;
+}
+
 }
 
 } catch(err){ console.log(err); }
@@ -310,56 +301,6 @@ return `🎯 Treino ${fila.tipo}
 ${listarJogadores(fila.jogadores)}
 
 Vagas: ${fila.jogadores.length}/${fila.max}`;
-}
-
-async function fecharNormal(guild,fila){
-
-const categoria=guild.channels.cache.find(c=>c.name.toLowerCase()==="rush");
-if(!categoria) return;
-
-const taxa = fila.valor * 0.10;
-const total = fila.valor + taxa;
-
-const canal = await guild.channels.create({
-name:`${fila.tipo}-${fila.valor}`,
-type:ChannelType.GuildText,
-parent:categoria.id
-});
-
-fila.canalPartida = canal.id;
-
-await canal.send(`
-🔥 **PARTIDA FECHADA**
-
-💰 Valor base: R$${fila.valor.toFixed(2)}
-📈 Taxa 10%: R$${taxa.toFixed(2)}
-💵 Total: R$${total.toFixed(2)}
-
-🏦 PIX:
-\`${CPF_PIX}\`
-
-👥 Jogadores:
-${listarJogadores(fila.jogadores)}
-`);
-
-await canal.send({
-content:"🔒 Painel do Mediador",
-components:[
-new ActionRowBuilder().addComponents(
-new ButtonBuilder()
-.setCustomId(`confirmar_${fila.id}`)
-.setLabel("✅ Confirmar Sala")
-.setStyle(ButtonStyle.Success),
-new ButtonBuilder()
-.setCustomId(`encerrar_${fila.id}`)
-.setLabel("🗑️ Encerrar")
-.setStyle(ButtonStyle.Danger)
-)
-]
-});
-
-fila.jogadores=[];
-await fila.mensagem.edit({content: gerarMensagemNormal(fila)});
 }
 
 client.login(TOKEN);
