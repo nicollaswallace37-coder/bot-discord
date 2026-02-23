@@ -76,7 +76,6 @@ if (interaction.commandName === "painel") {
 
 const tipoMenu = new StringSelectMenuBuilder()
 .setCustomId("normal_tipo")
-.setPlaceholder("Escolha o tipo")
 .addOptions(
 { label:"1x1", value:"1x1"},
 { label:"2x2", value:"2x2"},
@@ -95,7 +94,6 @@ if (interaction.commandName === "fila-treino") {
 
 const tipoMenu = new StringSelectMenuBuilder()
 .setCustomId("treino_tipo")
-.setPlaceholder("Escolha o tipo")
 .addOptions(
 { label:"1x1", value:"1x1"},
 { label:"2x2", value:"2x2"},
@@ -115,6 +113,7 @@ ephemeral:true
 
 if (interaction.isStringSelectMenu()) {
 
+/* NORMAL */
 if (interaction.customId === "normal_tipo") {
 
 configTemp.set(interaction.user.id,{
@@ -125,7 +124,6 @@ canal:interaction.channel.id
 
 const modoMenu = new StringSelectMenuBuilder()
 .setCustomId("normal_modo")
-.setPlaceholder("Escolha o modo")
 .addOptions(MODOS.map(m=>({label:m,value:m})));
 
 return interaction.update({
@@ -145,6 +143,7 @@ ephemeral:true
 });
 }
 
+/* TREINO */
 if (interaction.customId === "treino_tipo") {
 
 configTemp.set(interaction.user.id,{
@@ -155,7 +154,6 @@ canal:interaction.channel.id
 
 const modoMenu = new StringSelectMenuBuilder()
 .setCustomId("treino_modo")
-.setPlaceholder("Escolha o modo")
 .addOptions(MODOS.map(m=>({label:m,value:m})));
 
 return interaction.update({
@@ -270,6 +268,71 @@ await fila.mensagem.edit({content: gerarMensagemNormal(fila)});
 return;
 }
 
+/* CONFIRMAR */
+if(interaction.customId.startsWith("confirmar_")){
+
+if(interaction.user.id !== MEDIADOR_ID)
+return interaction.reply({content:"Apenas o mediador pode usar.",ephemeral:true});
+
+const filaId = interaction.customId.replace("confirmar_","");
+const modal = new ModalBuilder()
+.setCustomId(`modal_${filaId}`)
+.setTitle("Configurar Sala");
+
+modal.addComponents(
+new ActionRowBuilder().addComponents(
+new TextInputBuilder()
+.setCustomId("codigo")
+.setLabel("Código da Sala")
+.setStyle(TextInputStyle.Short)
+.setRequired(true)
+),
+new ActionRowBuilder().addComponents(
+new TextInputBuilder()
+.setCustomId("senha")
+.setLabel("Senha da Sala")
+.setStyle(TextInputStyle.Short)
+.setRequired(true)
+)
+);
+
+return interaction.showModal(modal);
+}
+
+/* ENCERRAR */
+if(interaction.customId.startsWith("encerrar_")){
+
+if(interaction.user.id !== MEDIADOR_ID)
+return interaction.reply({content:"Apenas o mediador pode usar.",ephemeral:true});
+
+await interaction.reply({content:"Encerrando partida...",ephemeral:true});
+setTimeout(()=> interaction.channel.delete().catch(()=>{}),2000);
+return;
+}
+
+}
+
+/**************** MODAL ****************/
+
+if(interaction.isModalSubmit()){
+
+const filaId = interaction.customId.replace("modal_","");
+const fila = filasNormal.get(filaId);
+if(!fila) return;
+
+const codigo = interaction.fields.getTextInputValue("codigo");
+const senha = interaction.fields.getTextInputValue("senha");
+
+const canal = interaction.guild.channels.cache.get(fila.canalPartida);
+
+await canal.send(`
+🎮 SALA LIBERADA
+
+📌 Código: ${codigo}
+🔑 Senha: ${senha}
+`);
+
+return interaction.reply({content:"Sala enviada no canal.",ephemeral:true});
 }
 
 } catch(err){ console.log(err); }
