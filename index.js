@@ -13,9 +13,9 @@ ButtonBuilder,
 ButtonStyle,
 StringSelectMenuBuilder,
 ChannelType,
+PermissionFlagsBits,
 REST,
-Routes,
-SlashCommandBuilder
+Routes
 } = require("discord.js");
 
 const client = new Client({
@@ -35,36 +35,34 @@ const GUILD_ID = process.env.GUILD_ID;
 
 const TIPOS = { "1x1": 2, "2x2": 4, "3x3": 6, "4x4": 8 };
 const MODOS = ["Mobile","Emu","Misto","Tático","Full Soco"];
+const CPF_PIX = "450.553.628.98";
 
 const filasNormal = new Map();
 const filasTreino = new Map();
 const configTemp = new Map();
 
-/**************** SLASH COMMANDS ****************/
+/**************** SLASH ****************/
 
 const commands = [
-new SlashCommandBuilder().setName("painel").setDescription("Criar fila normal"),
-new SlashCommandBuilder().setName("fila-treino").setDescription("Criar fila treino")
-].map(cmd => cmd.toJSON());
-
-client.once("ready", async () => {
-
-console.log(`✅ Online como ${client.user.tag}`);
+{ name: "painel", description: "Criar fila normal" },
+{ name: "fila-treino", description: "Criar fila treino" }
+];
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
-
+(async () => {
 await rest.put(
 Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
 { body: commands }
 );
+})();
 
-console.log("✅ Slash commands registrados!");
+client.once("ready", () => {
+console.log(`✅ Online como ${client.user.tag}`);
 });
 
 /**************** INTERAÇÕES ****************/
 
 client.on("interactionCreate", async (interaction) => {
-
 try {
 
 if (interaction.isChatInputCommand()) {
@@ -74,6 +72,7 @@ if (interaction.commandName === "painel") {
 
 const tipoMenu = new StringSelectMenuBuilder()
 .setCustomId("normal_tipo")
+.setPlaceholder("Escolha o tipo")
 .addOptions(
 { label:"1x1", value:"1x1"},
 { label:"2x2", value:"2x2"},
@@ -93,6 +92,7 @@ if (interaction.commandName === "fila-treino") {
 
 const tipoMenu = new StringSelectMenuBuilder()
 .setCustomId("treino_tipo")
+.setPlaceholder("Escolha o tipo")
 .addOptions(
 { label:"1x1", value:"1x1"},
 { label:"2x2", value:"2x2"},
@@ -124,6 +124,7 @@ canal:interaction.channel.id
 
 const modoMenu = new StringSelectMenuBuilder()
 .setCustomId("normal_modo")
+.setPlaceholder("Escolha o modo")
 .addOptions(MODOS.map(m=>({label:m,value:m})));
 
 return interaction.update({
@@ -136,14 +137,11 @@ components:[new ActionRowBuilder().addComponents(modoMenu)]
 if (interaction.customId === "normal_modo") {
 
 const config = configTemp.get(interaction.user.id);
-if(!config)
-return interaction.update({content:"Configuração expirada.",components:[]});
-
 config.modo = interaction.values[0];
 
-return interaction.update({
+return interaction.reply({
 content:"Digite os valores separados por vírgula.\nEx: 10,20,30",
-components:[]
+ephemeral:true
 });
 }
 
@@ -158,6 +156,7 @@ canal:interaction.channel.id
 
 const modoMenu = new StringSelectMenuBuilder()
 .setCustomId("treino_modo")
+.setPlaceholder("Escolha o modo")
 .addOptions(MODOS.map(m=>({label:m,value:m})));
 
 return interaction.update({
@@ -170,9 +169,6 @@ components:[new ActionRowBuilder().addComponents(modoMenu)]
 if (interaction.customId === "treino_modo") {
 
 const config = configTemp.get(interaction.user.id);
-if(!config)
-return interaction.update({content:"Configuração expirada.",components:[]});
-
 config.modo = interaction.values[0];
 
 const id = Date.now().toString();
@@ -206,10 +202,7 @@ components:[new ActionRowBuilder().addComponents(entrar,sair)]
 fila.mensagem = msg;
 configTemp.delete(interaction.user.id);
 
-return interaction.update({
-content:"Fila treino criada com sucesso ✅",
-components:[]
-});
+return interaction.reply({content:"Fila treino criada.",ephemeral:true});
 }
 
 }
@@ -218,21 +211,15 @@ components:[]
 
 if (interaction.isButton()) {
 
-const isNormal = interaction.customId.startsWith("entrar_normal_") || interaction.customId.startsWith("sair_normal_");
-const isTreino = interaction.customId.startsWith("entrar_treino_") || interaction.customId.startsWith("sair_treino_");
+/* ENTRAR NORMAL */
+if (interaction.customId.startsWith("entrar_normal_")) {
 
-if(isNormal){
-
-const id = interaction.customId.split("_")[2];
+const id = interaction.customId.replace("entrar_normal_","");
 const fila = filasNormal.get(id);
 if(!fila) return interaction.deferUpdate();
 
-if(interaction.customId.startsWith("entrar")){
 if(!fila.jogadores.includes(interaction.user.id))
 fila.jogadores.push(interaction.user.id);
-}else{
-fila.jogadores = fila.jogadores.filter(x=>x!==interaction.user.id);
-}
 
 await interaction.deferUpdate();
 await fila.mensagem.edit({content: gerarMensagemNormal(fila)});
@@ -243,18 +230,29 @@ await fecharNormal(interaction.guild,fila);
 return;
 }
 
-if(isTreino){
+/* SAIR NORMAL */
+if (interaction.customId.startsWith("sair_normal_")) {
 
-const id = interaction.customId.split("_")[2];
+const id = interaction.customId.replace("sair_normal_","");
+const fila = filasNormal.get(id);
+if(!fila) return interaction.deferUpdate();
+
+fila.jogadores = fila.jogadores.filter(x=>x!==interaction.user.id);
+
+await interaction.deferUpdate();
+await fila.mensagem.edit({content: gerarMensagemNormal(fila)});
+return;
+}
+
+/* ENTRAR TREINO */
+if (interaction.customId.startsWith("entrar_treino_")) {
+
+const id = interaction.customId.replace("entrar_treino_","");
 const fila = filasTreino.get(id);
 if(!fila) return interaction.deferUpdate();
 
-if(interaction.customId.startsWith("entrar")){
 if(!fila.jogadores.includes(interaction.user.id))
 fila.jogadores.push(interaction.user.id);
-}else{
-fila.jogadores = fila.jogadores.filter(x=>x!==interaction.user.id);
-}
 
 await interaction.deferUpdate();
 await fila.mensagem.edit({content: gerarMensagemTreino(fila)});
@@ -265,9 +263,131 @@ await fecharTreino(interaction.guild,fila);
 return;
 }
 
+/* SAIR TREINO */
+if (interaction.customId.startsWith("sair_treino_")) {
+
+const id = interaction.customId.replace("sair_treino_","");
+const fila = filasTreino.get(id);
+if(!fila) return interaction.deferUpdate();
+
+fila.jogadores = fila.jogadores.filter(x=>x!==interaction.user.id);
+
+await interaction.deferUpdate();
+await fila.mensagem.edit({content: gerarMensagemTreino(fila)});
+return;
 }
 
-} catch(err){
-console.log("ERRO:",err);
 }
+
+} catch(err){ console.log(err); }
 });
+
+/**************** NORMAL MESSAGE ****************/
+
+client.on("messageCreate", async (message)=>{
+
+if(message.author.bot) return;
+if(!configTemp.has(message.author.id)) return;
+
+const config = configTemp.get(message.author.id);
+if(config.sistema!=="normal") return;
+if(message.channel.id!==config.canal) return;
+
+const valores = message.content.split(",").map(v=>parseFloat(v.trim()));
+
+for(const valor of valores){
+
+const id = Date.now().toString()+Math.random();
+
+const fila={
+id,
+tipo:config.tipo,
+modo:config.modo,
+valor,
+jogadores:[],
+max:TIPOS[config.tipo],
+mensagem:null
+};
+
+filasNormal.set(id,fila);
+
+const entrar=new ButtonBuilder()
+.setCustomId(`entrar_normal_${id}`)
+.setLabel("Entrar")
+.setStyle(ButtonStyle.Success);
+
+const sair=new ButtonBuilder()
+.setCustomId(`sair_normal_${id}`)
+.setLabel("Sair")
+.setStyle(ButtonStyle.Danger);
+
+const msg=await message.channel.send({
+content: gerarMensagemNormal(fila),
+components:[new ActionRowBuilder().addComponents(entrar,sair)]
+});
+
+fila.mensagem=msg;
+}
+
+configTemp.delete(message.author.id);
+});
+
+/**************** FUNÇÕES ****************/
+
+function listarJogadores(lista){
+if(lista.length===0) return "Nenhum jogador ainda.";
+return lista.map(id=>`<@${id}>`).join("\n");
+}
+
+function gerarMensagemNormal(fila){
+return `💰 Fila ${fila.tipo}
+🎮 Modo: ${fila.modo}
+💵 Valor: R$${fila.valor}
+
+👥 Jogadores:
+${listarJogadores(fila.jogadores)}
+
+Vagas: ${fila.jogadores.length}/${fila.max}`;
+}
+
+function gerarMensagemTreino(fila){
+return `🎯 Treino ${fila.tipo}
+🎮 Modo: ${fila.modo}
+
+👥 Jogadores:
+${listarJogadores(fila.jogadores)}
+
+Vagas: ${fila.jogadores.length}/${fila.max}`;
+}
+
+async function fecharNormal(guild,fila){
+
+const categoria=guild.channels.cache.find(c=>c.name.toLowerCase()==="rush");
+if(!categoria) return;
+
+await guild.channels.create({
+name:`${fila.tipo}-${fila.valor}`,
+type:ChannelType.GuildText,
+parent:categoria.id
+});
+
+fila.jogadores=[];
+await fila.mensagem.edit({content: gerarMensagemNormal(fila)});
+}
+
+async function fecharTreino(guild,fila){
+
+const categoria=guild.channels.cache.find(c=>c.name.toLowerCase()==="rush treino");
+if(!categoria) return;
+
+await guild.channels.create({
+name:`${fila.tipo}-${fila.modo}`,
+type:ChannelType.GuildText,
+parent:categoria.id
+});
+
+fila.jogadores=[];
+await fila.mensagem.edit({content: gerarMensagemTreino(fila)});
+}
+
+client.login(TOKEN);
