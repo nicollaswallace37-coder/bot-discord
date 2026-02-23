@@ -17,7 +17,8 @@ REST,
 Routes,
 ModalBuilder,
 TextInputBuilder,
-TextInputStyle
+TextInputStyle,
+PermissionFlagsBits
 } = require("discord.js");
 
 const client = new Client({
@@ -67,6 +68,8 @@ console.log(`✅ Online como ${client.user.tag}`);
 
 client.on("interactionCreate", async (interaction) => {
 try {
+
+/**************** SLASH ****************/
 
 if (interaction.isChatInputCommand()) {
 
@@ -206,39 +209,6 @@ return interaction.reply({content:"Fila treino criada.",ephemeral:true});
 
 if (interaction.isButton()) {
 
-/* ENTRAR NORMAL */
-if (interaction.customId.startsWith("entrar_normal_")) {
-
-const id = interaction.customId.replace("entrar_normal_","");
-const fila = filasNormal.get(id);
-if(!fila) return interaction.deferUpdate();
-
-if(!fila.jogadores.includes(interaction.user.id))
-fila.jogadores.push(interaction.user.id);
-
-await interaction.deferUpdate();
-await fila.mensagem.edit({content: gerarMensagemNormal(fila)});
-
-if(fila.jogadores.length===fila.max)
-await fecharNormal(interaction.guild,fila);
-
-return;
-}
-
-/* SAIR NORMAL */
-if (interaction.customId.startsWith("sair_normal_")) {
-
-const id = interaction.customId.replace("sair_normal_","");
-const fila = filasNormal.get(id);
-if(!fila) return interaction.deferUpdate();
-
-fila.jogadores = fila.jogadores.filter(x=>x!==interaction.user.id);
-
-await interaction.deferUpdate();
-await fila.mensagem.edit({content: gerarMensagemNormal(fila)});
-return;
-}
-
 /* CONFIRMAR SALA */
 if(interaction.customId.startsWith("confirmar_")){
 
@@ -278,11 +248,7 @@ if(interaction.user.id !== MEDIADOR_ID)
 return interaction.reply({content:"Apenas o mediador pode usar.",ephemeral:true});
 
 await interaction.reply({content:"Encerrando partida...",ephemeral:true});
-
-setTimeout(()=>{
-interaction.channel.delete().catch(()=>{});
-},2000);
-
+setTimeout(()=> interaction.channel.delete().catch(()=>{}),2000);
 return;
 }
 }
@@ -303,72 +269,19 @@ if(!fila) return interaction.reply({content:"Fila não encontrada.",ephemeral:tr
 const codigo = interaction.fields.getTextInputValue("codigo");
 const senha = interaction.fields.getTextInputValue("senha");
 
-for(const jogadorId of fila.jogadoresSalvos){
-try{
-const membro = await interaction.guild.members.fetch(jogadorId);
-await membro.send(`
+const canal = interaction.guild.channels.cache.get(fila.canalPartida);
+
+await canal.send(`
 🎮 **SALA LIBERADA**
 
 📌 Código: ${codigo}
 🔑 Senha: ${senha}
 `);
-}catch{}
-}
 
-return interaction.reply({content:"Sala enviada no privado.",ephemeral:true});
+return interaction.reply({content:"Sala enviada no canal.",ephemeral:true});
 }
 
 } catch(err){ console.log(err); }
-});
-
-/**************** NORMAL MESSAGE ****************/
-
-client.on("messageCreate", async (message)=>{
-
-if(message.author.bot) return;
-if(!configTemp.has(message.author.id)) return;
-
-const config = configTemp.get(message.author.id);
-if(config.sistema!=="normal") return;
-if(message.channel.id!==config.canal) return;
-
-const valores = message.content.split(",").map(v=>parseFloat(v.trim()));
-
-for(const valor of valores){
-
-const id = Date.now().toString()+Math.random();
-
-const fila={
-id,
-tipo:config.tipo,
-modo:config.modo,
-valor,
-jogadores:[],
-max:TIPOS[config.tipo],
-mensagem:null
-};
-
-filasNormal.set(id,fila);
-
-const entrar=new ButtonBuilder()
-.setCustomId(`entrar_normal_${id}`)
-.setLabel("Entrar")
-.setStyle(ButtonStyle.Success);
-
-const sair=new ButtonBuilder()
-.setCustomId(`sair_normal_${id}`)
-.setLabel("Sair")
-.setStyle(ButtonStyle.Danger);
-
-const msg=await message.channel.send({
-content: gerarMensagemNormal(fila),
-components:[new ActionRowBuilder().addComponents(entrar,sair)]
-});
-
-fila.mensagem=msg;
-}
-
-configTemp.delete(message.author.id);
 });
 
 /**************** FUNÇÕES ****************/
@@ -382,6 +295,16 @@ function gerarMensagemNormal(fila){
 return `💰 Fila ${fila.tipo}
 🎮 Modo: ${fila.modo}
 💵 Valor: R$${fila.valor}
+
+👥 Jogadores:
+${listarJogadores(fila.jogadores)}
+
+Vagas: ${fila.jogadores.length}/${fila.max}`;
+}
+
+function gerarMensagemTreino(fila){
+return `🎯 Treino ${fila.tipo}
+🎮 Modo: ${fila.modo}
 
 👥 Jogadores:
 ${listarJogadores(fila.jogadores)}
@@ -404,7 +327,6 @@ parent:categoria.id
 });
 
 fila.canalPartida = canal.id;
-fila.jogadoresSalvos = [...fila.jogadores];
 
 await canal.send(`
 🔥 **PARTIDA FECHADA**
@@ -420,19 +342,20 @@ await canal.send(`
 ${listarJogadores(fila.jogadores)}
 `);
 
-const confirmar = new ButtonBuilder()
-.setCustomId(`confirmar_${fila.id}`)
-.setLabel("✅ Confirmar Sala")
-.setStyle(ButtonStyle.Success);
-
-const encerrar = new ButtonBuilder()
-.setCustomId(`encerrar_${fila.id}`)
-.setLabel("🗑️ Encerrar")
-.setStyle(ButtonStyle.Danger);
-
 await canal.send({
 content:"🔒 Painel do Mediador",
-components:[new ActionRowBuilder().addComponents(confirmar,encerrar)]
+components:[
+new ActionRowBuilder().addComponents(
+new ButtonBuilder()
+.setCustomId(`confirmar_${fila.id}`)
+.setLabel("✅ Confirmar Sala")
+.setStyle(ButtonStyle.Success),
+new ButtonBuilder()
+.setCustomId(`encerrar_${fila.id}`)
+.setLabel("🗑️ Encerrar")
+.setStyle(ButtonStyle.Danger)
+)
+]
 });
 
 fila.jogadores=[];
